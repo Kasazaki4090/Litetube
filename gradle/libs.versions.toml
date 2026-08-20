@@ -1,5 +1,5 @@
 [versions]
-agp = "8.9.3"
+agp = "9.3.1"
 hilt = "2.57.2"
 commonsIo = "2.21.0"
 desugar_jdk_libs_nio = "2.1.5"
@@ -14,7 +14,7 @@ material = "1.13.0"
 media3Exoplayer = "1.10.0"
 mockito = "5.8.0"
 #noinspection GradleDependency
-mmkv = "1.3.12"
+mmkv = "2.4.1"
 activity = "1.13.0"
 constraintlayout = "2.2.1"
 media = "1.7.1"

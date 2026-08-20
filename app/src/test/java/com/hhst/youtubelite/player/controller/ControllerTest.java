@@ -31,6 +31,7 @@ public class ControllerTest {
 		assertTrue(Controller.shouldExitFs(
 						true,
 						true,
+						false,
 						Configuration.ORIENTATION_UNDEFINED,
 						Configuration.ORIENTATION_PORTRAIT));
 	}

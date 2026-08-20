@@ -28,7 +28,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleEventObserver;
 import androidx.lifecycle.ProcessLifecycleOwner;
@@ -265,6 +267,23 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 	@Override
 	public void onConfigurationChanged(@NonNull Configuration newConfig) {
 		super.onConfigurationChanged(newConfig);
+		getDelegate().applyDayNight();
+		EdgeToEdge.enable(this);
+
+		boolean isDark = (newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+		WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+		if (controller != null) {
+			controller.setAppearanceLightStatusBars(!isDark);
+			controller.setAppearanceLightNavigationBars(!isDark);
+		}
+
+		getWindow().setBackgroundDrawableResource(R.color.background);
+		View mainView = findViewById(R.id.main);
+		if (mainView != null) {
+			Context configurationContext = createConfigurationContext(newConfig);
+			mainView.setBackgroundColor(configurationContext.getColor(R.color.background));
+		}
+
 		// The activity is not recreated (see configChanges in the manifest); keep the
 		// player's rotation/fullscreen state in sync with the new configuration.
 		if (player != null) player.syncRotation(DeviceUtils.isRotateOn(this), newConfig.orientation);
