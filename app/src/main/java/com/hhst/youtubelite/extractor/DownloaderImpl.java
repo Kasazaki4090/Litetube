@@ -3,6 +3,8 @@ package com.hhst.youtubelite.extractor;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.hhst.youtubelite.Constant;
 
 import org.schabi.newpipe.extractor.downloader.Downloader;
@@ -11,6 +13,7 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -72,10 +75,21 @@ public final class DownloaderImpl extends Downloader {
 		final Map<String, List<String>> headers = request.headers();
 		byte[] dataToSend = request.dataToSend();
 
+		if (dataToSend != null && url.contains("/youtubei/v1/player")) {
+			dataToSend = patchInnertubeRequest(dataToSend);
+		}
+
 		RequestBody requestBody = null;
 		if (dataToSend != null) requestBody = RequestBody.create(dataToSend);
 
-		final Request.Builder builder = new Request.Builder().url(url).method(httpMethod, requestBody).header("User-Agent", Constant.USER_AGENT);
+		// YouTube WEB and WEB_EMBEDDED_PLAYER clients require a desktop browser User-Agent.
+		// The default mobile UA (Constant.USER_AGENT) triggers 403 Forbidden or 360p limits.
+		String userAgent = Constant.USER_AGENT;
+		if (isYoutubeDesktopOrEmbedRequest(url)) {
+			userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+		}
+
+		final Request.Builder builder = new Request.Builder().url(url).method(httpMethod, requestBody).header("User-Agent", userAgent);
 		ExtractionSession session = scope.get();
 		AuthContext auth = session != null ? session.getAuth() : null;
 		String mergedCookies = mergeCookiesForUrl(
@@ -92,10 +106,20 @@ public final class DownloaderImpl extends Downloader {
 									String.join("; ", entry.getValue()));
 					continue;
 				}
+				// If the request already specifies a User-Agent, respect it, but still
+				// ensure YouTube API requests don't use the mobile one if not intended.
 				builder.removeHeader(headerName);
 				for (String value : entry.getValue()) {
 					builder.addHeader(headerName, value);
 				}
+			}
+		}
+
+		// Ensure proper Origin and Referer for YouTube API requests to avoid 403
+		if (YoutubeAuth.isWebApi(url)) {
+			builder.header("Origin", "https://www.youtube.com");
+			if (!hasHeader(headers, "Referer")) {
+				builder.header("Referer", "https://www.youtube.com/");
 			}
 		}
 		YoutubeAuth.Result authHeaders = YoutubeAuth.headers(url, auth, System.currentTimeMillis());
@@ -175,6 +199,55 @@ public final class DownloaderImpl extends Downloader {
 			return URI.create(url).getHost();
 		} catch (IllegalArgumentException ignored) {
 			return null;
+		}
+	}
+
+	private byte[] patchInnertubeRequest(byte[] data) {
+		try {
+			String json = new String(data, StandardCharsets.UTF_8);
+			JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+			if (root.has("context")) {
+				JsonObject context = root.getAsJsonObject("context");
+				if (context.has("client")) {
+					JsonObject client = context.getAsJsonObject("client");
+					// Force a modern WEB_EMBEDDED_PLAYER version to unlock HD resolutions.
+					// Older versions like 9.20220918 are often capped at 360p by YouTube.
+					client.addProperty("clientName", "WEB_EMBEDDED_PLAYER");
+					client.addProperty("clientVersion", "2.20260708.00.00");
+				}
+			}
+
+			// Add flags to bypass age/content restrictions and potentially unlock higher quality.
+			if (!root.has("playbackContext")) {
+				root.add("playbackContext", new JsonObject());
+			}
+			JsonObject playbackContext = root.getAsJsonObject("playbackContext");
+			playbackContext.addProperty("contentCheckOk", true);
+			playbackContext.addProperty("racyCheckOk", true);
+
+			return root.toString().getBytes(StandardCharsets.UTF_8);
+		} catch (Exception e) {
+			return data;
+		}
+	}
+
+	private boolean isYoutubeDesktopOrEmbedRequest(@NonNull String url) {
+		if (YoutubeAuth.isWebApi(url)) {
+			return true;
+		}
+		try {
+			URI uri = URI.create(url);
+			String host = uri.getHost();
+			if (host == null) return false;
+			String lowerHost = host.toLowerCase(Locale.US);
+			if (!lowerHost.equals(Constant.YOUTUBE_DOMAIN) && !lowerHost.endsWith("." + Constant.YOUTUBE_DOMAIN)) {
+				return false;
+			}
+			String path = uri.getPath();
+			// Treat /embed/, /watch, and /iframe_api as Desktop/Embed context
+			return path != null && (path.contains("/embed/") || path.startsWith("/watch") || path.contains("/iframe_api"));
+		} catch (Exception ignored) {
+			return false;
 		}
 	}
 

@@ -356,7 +356,7 @@ public final class YoutubeHttpDataSource extends BaseDataSource implements HttpD
 
 		if (isWebClientRequest) {
 			conn.setRequestProperty(HttpHeaders.ORIGIN, "https://www.youtube.com");
-			conn.setRequestProperty(HttpHeaders.REFERER, "https://www.youtube.com");
+			conn.setRequestProperty(HttpHeaders.REFERER, "https://www.youtube.com/");
 			conn.setRequestProperty(HttpHeaders.SEC_FETCH_DEST, "empty");
 			conn.setRequestProperty(HttpHeaders.SEC_FETCH_MODE, "cors");
 			conn.setRequestProperty(HttpHeaders.SEC_FETCH_SITE, "cross-site");

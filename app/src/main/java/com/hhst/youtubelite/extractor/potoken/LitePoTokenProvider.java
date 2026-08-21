@@ -29,7 +29,7 @@ public final class LitePoTokenProvider implements PoTokenProvider {
 	@Override
 	@Nullable
 	public PoTokenResult getWebEmbedClientPoToken(String videoId) {
-		return null;
+		return coordinator.getWebClientPoToken(videoId);
 	}
 
 	@Override
