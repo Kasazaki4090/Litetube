@@ -66,6 +66,15 @@ public class StreamDownloaderImpl implements StreamDownloader {
 			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 					+ "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 	/**
+	 * User-Agent of the YouTube TVHTML5 client (smart TVs / game consoles). Streaming URLs
+	 * issued to the TVHTML5 client must be requested with this User-Agent: googlevideo
+	 * validates that the User-Agent matches the client the URL was generated for and answers
+	 * HTTP 403 on a mismatch. Mirrors the extractor's {@code ClientsConstants.TVHTML5_USER_AGENT}
+	 * and {@link com.hhst.youtubelite.player.engine.datasource.YoutubeHttpDataSource}.
+	 */
+	private static final String YOUTUBE_TVHTML5_USER_AGENT =
+			"Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version";
+	/**
 	 * Number of attempts per chunk before the download fails. Transient failures (HTTP 5xx,
 	 * dropped connections, read timeouts) are retried automatically; only after every attempt
 	 * is exhausted does the chunk — and therefore the whole download — fail.
@@ -114,6 +123,17 @@ public class StreamDownloaderImpl implements StreamDownloader {
 	}
 
 	/**
+	 * Checks if a streaming URL was issued to the {@code TVHTML5} (YouTube on smart TVs)
+	 * client. The extractor has no helper for this client, so it is detected directly from
+	 * the {@code c=TVHTML5} query parameter; that pattern cannot collide with the WEB / IOS /
+	 * ANDROID checks. Mirrors
+	 * {@link com.hhst.youtubelite.player.engine.datasource.YoutubeHttpDataSource}.
+	 */
+	private static boolean isTvHtml5StreamingUrl(@NonNull String url) {
+		return url.contains("&c=TVHTML5") || url.contains("?c=TVHTML5");
+	}
+
+	/**
 	 * Builds the request headers googlevideo expects for a streaming URL, per the client the
 	 * URL was issued to. Without the matching User-Agent (and, for web-client URLs, the
 	 * browser headers), googlevideo answers HTTP 403 and the download fails — this is what
@@ -140,6 +160,8 @@ public class StreamDownloaderImpl implements StreamDownloader {
 			userAgent = getAndroidUserAgent(null);
 		} else if (isIosStreamingUrl(url)) {
 			userAgent = getIosUserAgent(null);
+		} else if (isTvHtml5StreamingUrl(url)) {
+			userAgent = YOUTUBE_TVHTML5_USER_AGENT;
 		} else {
 			userAgent = YOUTUBE_WEB_USER_AGENT;
 		}

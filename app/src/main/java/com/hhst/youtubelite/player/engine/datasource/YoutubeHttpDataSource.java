@@ -79,6 +79,14 @@ public final class YoutubeHttpDataSource extends BaseDataSource implements HttpD
 	private static final String YOUTUBE_WEB_USER_AGENT =
 			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 					+ "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+	/**
+	 * User-Agent of the YouTube TVHTML5 client (smart TVs / game consoles). Streaming URLs
+	 * issued to the TVHTML5 client must be requested with this User-Agent: googlevideo
+	 * validates that the User-Agent matches the client the URL was generated for and answers
+	 * HTTP 403 on a mismatch. Mirrors the extractor's {@code ClientsConstants.TVHTML5_USER_AGENT}.
+	 */
+	private static final String YOUTUBE_TVHTML5_USER_AGENT =
+			"Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version";
 	private final boolean allowCrossProtocolRedirects;
 	private final boolean rangeParameterEnabled;
 	private final boolean rnParameterEnabled;
@@ -129,6 +137,16 @@ public final class YoutubeHttpDataSource extends BaseDataSource implements HttpD
 	 */
 	private static boolean isAndroidVrStreamingUrl(@NonNull String url) {
 		return url.contains("&c=ANDROID_VR") || url.contains("?c=ANDROID_VR");
+	}
+
+	/**
+	 * Checks if a streaming URL was issued to the {@code TVHTML5} (YouTube on smart TVs)
+	 * client. The extractor has no helper for this client, so it is detected directly from
+	 * the {@code c=TVHTML5} query parameter; that pattern cannot collide with the WEB / IOS /
+	 * ANDROID checks.
+	 */
+	private static boolean isTvHtml5StreamingUrl(@NonNull String url) {
+		return url.contains("&c=TVHTML5") || url.contains("?c=TVHTML5");
 	}
 
 	@Override
@@ -372,6 +390,7 @@ public final class YoutubeHttpDataSource extends BaseDataSource implements HttpD
 		boolean isAndroidVrRequest = isAndroidVrStreamingUrl(requestUrl);
 		boolean isAndroidRequest = isAndroidStreamingUrl(requestUrl);
 		boolean isIosRequest = isIosStreamingUrl(requestUrl);
+		boolean isTvHtml5Request = isTvHtml5StreamingUrl(requestUrl);
 		if (isWebClientRequest)
 			conn.setRequestProperty(HttpHeaders.USER_AGENT, YOUTUBE_WEB_USER_AGENT);
 		else if (isAndroidVrRequest)
@@ -380,14 +399,17 @@ public final class YoutubeHttpDataSource extends BaseDataSource implements HttpD
 			conn.setRequestProperty(HttpHeaders.USER_AGENT, getAndroidUserAgent(null));
 		else if (isIosRequest)
 			conn.setRequestProperty(HttpHeaders.USER_AGENT, getIosUserAgent(null));
+		else if (isTvHtml5Request)
+			conn.setRequestProperty(HttpHeaders.USER_AGENT, YOUTUBE_TVHTML5_USER_AGENT);
 		else
 			conn.setRequestProperty(HttpHeaders.USER_AGENT, userAgent);
 
 		conn.setRequestProperty(HttpHeaders.ACCEPT_ENCODING, allowGzip ? "gzip" : "identity");
 		conn.setInstanceFollowRedirects(followRedirects);
 		// The protobuf POST body mirrors the official Android/iOS apps and is only used for the
-		// mobile clients; web-client URLs are fetched with a plain GET like a browser would.
-		if (isVideoPlaybackUrl && !isWebClientRequest) {
+		// mobile clients; HTML5-based URLs (web, TVHTML5) are fetched with a plain GET like a
+		// browser would.
+		if (isVideoPlaybackUrl && !isWebClientRequest && !isTvHtml5Request) {
 			conn.setRequestMethod("POST");
 			conn.setDoOutput(true);
 			conn.setFixedLengthStreamingMode(POST_BODY.length);
