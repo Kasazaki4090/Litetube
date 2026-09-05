@@ -386,16 +386,15 @@ public class LitePlayerView extends PlayerView {
 
 	public void setNavbarVisible(boolean visible) {
 		if (!isFs) return;
-		View decorView = activity.getWindow().getDecorView();
 		if (visible) {
-			decorView.setSystemUiVisibility(
-				View.SYSTEM_UI_FLAG_LOW_PROFILE
-				| View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-				| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-			);
-		} else {
-			ViewUtils.setFullscreen(decorView, true);
+			// In fullscreen, tapping to reveal controls must NOT bring down the status bar.
+			// The only way it appears is the system's transient swipe-down peek
+			// (BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE), which auto-hides on release.
+			return;
 		}
+		// Controls hidden: re-assert immersive mode so the bar stays hidden and
+		// the swipe-down peek keeps working.
+		ViewUtils.setFullscreen(activity, true);
 	}
 
 	private void animateMiniTransition(float startX,
@@ -795,7 +794,7 @@ public class LitePlayerView extends PlayerView {
 						: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 		activity.setRequestedOrientation(requestedOrientation);
 		portraitNormalStateRequested = false;
-		ViewUtils.setFullscreen(activity.getWindow().getDecorView(), false);
+		ViewUtils.setFullscreen(activity, false);
 		updatePlayerLayout(false);
 		setResizeMode(inAppMiniPlayer ? AspectRatioFrameLayout.RESIZE_MODE_FIT : defaultResizeMode);
 		updateMiniPlayerCornerClipping();
@@ -811,7 +810,7 @@ public class LitePlayerView extends PlayerView {
 		}
 		setParentInsetsSuppressed(true);
 		activity.setRequestedOrientation(fsOrientation);
-		ViewUtils.setFullscreen(activity.getWindow().getDecorView(), true);
+		ViewUtils.setFullscreen(activity, true);
 		updatePlayerLayout(true);
 		setResizeMode(defaultResizeMode);
 		updateMiniPlayerCornerClipping();

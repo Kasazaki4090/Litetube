@@ -1,9 +1,13 @@
 package com.hhst.youtubelite.util;
 
+import android.app.Activity;
 import android.content.Context;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 /**
  * Utility methods for View-related operations like DP/PX conversion and animations.
@@ -51,21 +55,24 @@ public final class ViewUtils {
 	/**
 	 * Sets the system UI visibility for fullscreen mode.
 	 *
-	 * @param view       The view to apply the visibility to.
+	 * <p>Uses the modern {@link WindowInsetsControllerCompat} API (the same one used by
+	 * edge-to-edge) instead of the deprecated {@code setSystemUiVisibility} flags. Mixing the
+	 * legacy flags with edge-to-edge made the status bar opaque and resized/squashed content
+	 * when swiping down to reveal the bars.
+	 *
+	 * @param activity   The activity whose window controls are being changed.
 	 * @param fullscreen True to enter fullscreen, false to exit.
 	 */
-	public static void setFullscreen(@NonNull View view, boolean fullscreen) {
+	public static void setFullscreen(@NonNull Activity activity, boolean fullscreen) {
+		WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
+						activity.getWindow(), activity.getWindow().getDecorView());
 		if (fullscreen) {
-			view.setSystemUiVisibility(
-							View.SYSTEM_UI_FLAG_LOW_PROFILE
-											| View.SYSTEM_UI_FLAG_FULLSCREEN
-											| View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-											| View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-											| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-											| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-			);
+			controller.hide(WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.navigationBars());
+			controller.setSystemBarsBehavior(
+							WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
 		} else {
-			view.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+			controller.show(WindowInsetsCompat.Type.systemBars());
+			controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_DEFAULT);
 		}
 	}
 }

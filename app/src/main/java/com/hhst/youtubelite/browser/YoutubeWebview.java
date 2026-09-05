@@ -568,7 +568,7 @@ public class YoutubeWebview extends WebView {
 
 					fullscreen = new FrameLayout(getContext());
 					((FrameLayout) fullscreen).addView(view, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-					ViewUtils.setFullscreen(fullscreen, true);
+					ViewUtils.setFullscreen(mainActivity, true);
 
 					((FrameLayout) mainActivity.getWindow().getDecorView()).addView(fullscreen, new FrameLayout.LayoutParams(-1, -1));
 					fullscreen.setVisibility(View.VISIBLE);
@@ -581,7 +581,9 @@ public class YoutubeWebview extends WebView {
 			@Override
 			public void onHideCustomView() {
 				if (fullscreen == null) return;
-				ViewUtils.setFullscreen(fullscreen, false);
+				if (getContext() instanceof MainActivity mainActivity) {
+					ViewUtils.setFullscreen(mainActivity, false);
+				}
 				fullscreen.setVisibility(View.GONE);
 				fullscreen.setKeepScreenOn(false);
 				setVisibility(View.VISIBLE);
