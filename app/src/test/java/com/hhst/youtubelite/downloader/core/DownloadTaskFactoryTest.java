@@ -14,7 +14,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.schabi.newpipe.extractor.MediaFormat;
 import org.schabi.newpipe.extractor.stream.AudioStream;
-import org.schabi.newpipe.extractor.stream.AudioTrackType;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 
 import java.io.File;
@@ -42,7 +41,7 @@ public class DownloadTaskFactoryTest {
 		videoDetails.setId("abc123");
 		videoDetails.setTitle("Test Video");
 		videoDetails.setThumbnailUrl("https://img.youtube.com/vi/abc123/hqdefault.jpg");
-		audio = audio("en", AudioTrackType.ORIGINAL);
+		audio = audio("original");
 		config = new DownloadSelectionConfig(
 						DownloadSelectionConfig.PrimaryMediaMode.VIDEO, false, false, 4);
 	}
@@ -131,12 +130,11 @@ public class DownloadTaskFactoryTest {
 		return stream;
 	}
 
-	private static AudioStream audio(String id, AudioTrackType type) {
+	private static AudioStream audio(String id) {
 		AudioStream stream = mock(AudioStream.class);
 		when(stream.getFormat()).thenReturn(MediaFormat.M4A);
 		when(stream.getAudioTrackId()).thenReturn(id);
 		when(stream.getAudioTrackName()).thenReturn("English");
-		when(stream.getAudioTrackType()).thenReturn(type);
 		when(stream.getAverageBitrate()).thenReturn(128);
 		return stream;
 	}

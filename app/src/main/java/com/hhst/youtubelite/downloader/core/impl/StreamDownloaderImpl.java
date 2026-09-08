@@ -4,7 +4,7 @@ import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getIosUserAgent;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isAndroidStreamingUrl;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isIosStreamingUrl;
-import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isWebEmbeddedPlayerStreamingUrl;
+import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isTvHtml5SimplyEmbeddedPlayerStreamingUrl;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isWebStreamingUrl;
 
 import androidx.annotation.NonNull;
@@ -143,7 +143,7 @@ public class StreamDownloaderImpl implements StreamDownloader {
 	 */
 	static Map<String, String> clientHeaders(@NonNull String url) {
 		Map<String, String> headers = new LinkedHashMap<>();
-		boolean web = isWebStreamingUrl(url) || isWebEmbeddedPlayerStreamingUrl(url);
+		boolean web = isWebStreamingUrl(url) || isTvHtml5SimplyEmbeddedPlayerStreamingUrl(url);
 		if (web) {
 			headers.put("Origin", "https://www.youtube.com");
 			headers.put("Referer", "https://www.youtube.com");

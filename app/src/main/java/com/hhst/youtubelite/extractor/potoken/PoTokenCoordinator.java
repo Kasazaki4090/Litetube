@@ -16,7 +16,6 @@ import com.tencent.mmkv.MMKV;
 import org.schabi.newpipe.extractor.localization.ContentCountry;
 import org.schabi.newpipe.extractor.localization.Localization;
 import org.schabi.newpipe.extractor.services.youtube.InnertubeClientRequestInfo;
-import org.schabi.newpipe.extractor.services.youtube.PoTokenResult;
 import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper;
 
 import java.util.List;

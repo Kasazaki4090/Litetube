@@ -47,7 +47,7 @@ import com.tencent.mmkv.MMKV;
 
 import org.schabi.newpipe.extractor.MediaFormat;
 import org.schabi.newpipe.extractor.stream.AudioStream;
-import org.schabi.newpipe.extractor.stream.AudioTrackType;
+
 import org.schabi.newpipe.extractor.stream.SubtitlesStream;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 
@@ -689,15 +689,13 @@ public class DownloadDialog {
 		String id = stream.getAudioTrackId();
 		if (hasText(id)) return "id:" + id;
 		String name = stream.getAudioTrackName();
-		Locale locale = stream.getAudioLocale();
-		AudioTrackType type = stream.getAudioTrackType();
-		if (!hasText(name) && locale == null && type == null) return "default";
+		String localeString = stream.getAudioLocale();
+		Locale locale = localeString != null ? Locale.forLanguageTag(localeString) : Locale.getDefault();
+		if (!hasText(name) && locale == null) return "default";
 		return "track:"
 						+ (hasText(name) ? name.trim() : "")
 						+ "|"
-						+ (locale == null ? "" : locale.toLanguageTag())
-						+ "|"
-						+ (type == null ? "" : type.name());
+						+ (locale == null ? "" : locale.toLanguageTag());
 	}
 
 	private static boolean hasText(@Nullable String value) {
@@ -707,7 +705,7 @@ public class DownloadDialog {
 	@NonNull
 	private AudioStream chooseOriginalAudioStream(@NonNull List<AudioStream> streams) {
 		for (AudioStream stream : streams) {
-			if (stream.getAudioTrackType() == AudioTrackType.ORIGINAL) return stream;
+			if ("original".equalsIgnoreCase(stream.getAudioTrackId())) return stream;
 		}
 		return streams.get(0);
 	}

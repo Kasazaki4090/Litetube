@@ -5,6 +5,7 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.media3.common.C;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
@@ -33,10 +34,21 @@ import com.hhst.youtubelite.player.queue.QueueRepository;
 import com.hhst.youtubelite.player.sponsor.SponsorBlockManager;
 import com.hhst.youtubelite.player.sponsor.SponsorOverlayView;
 import com.hhst.youtubelite.ui.ErrorDialog;
+import com.hhst.youtubelite.ui.MainActivity;
 import com.hhst.youtubelite.util.DeviceUtils;
 import com.tencent.mmkv.MMKV;
 
-import org.schabi.newpipe.extractor.exceptions.SignInConfirmNotBotException;
+import org.schabi.newpipe.extractor.exceptions.AgeRestrictedContentException;
+import org.schabi.newpipe.extractor.exceptions.AntiBotException;
+import org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException;
+import org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException;
+import org.schabi.newpipe.extractor.exceptions.ContentNotSupportedException;
+import org.schabi.newpipe.extractor.exceptions.AntiBotException;
+import org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException;
+import org.schabi.newpipe.extractor.exceptions.PaidContentException;
+import org.schabi.newpipe.extractor.exceptions.PrivateContentException;
+import org.schabi.newpipe.extractor.exceptions.ReCaptchaException;
+import org.schabi.newpipe.extractor.exceptions.YoutubeMusicPremiumContentException;
 
 import java.io.IOException;
 import java.net.ConnectException;
@@ -202,7 +214,7 @@ public class LitePlayer {
 	private void saveSelectedTrackLanguage(Tracks tracks) {
 		try {
 			for (Tracks.Group group : tracks.getGroups()) {
-				if (group.getType() == androidx.media3.common.C.TRACK_TYPE_AUDIO && group.isSelected()) {
+				if (group.getType() == C.TRACK_TYPE_AUDIO && group.isSelected()) {
 					for (int i = 0; i < group.length; i++) {
 						if (group.isTrackSelected(i)) {
 							String lang = group.getTrackFormat(i).language;
@@ -239,8 +251,12 @@ public class LitePlayer {
 	}
 
 	public void play(String url) {
+		internalPlay(url, false);
+	}
+
+	private void internalPlay(String url, boolean isRetry) {
 		String videoId = YoutubeExtractor.getVideoId(url);
-		if (videoId == null || Objects.equals(this.queuedId, videoId)) return;
+		if (videoId == null || (Objects.equals(this.queuedId, videoId) && !isRetry)) return;
 		this.queuedId = videoId;
 
 		activity.runOnUiThread(() -> {
@@ -313,7 +329,28 @@ public class LitePlayer {
 							if (cause instanceof Exception && !(cause instanceof ExtractionException)) {
 								cause = classifyException((Exception) cause);
 							}
+
 							if (cause instanceof ExtractionException) {
+								String msg = cause.getMessage();
+								if (!isRetry && msg != null && msg.toLowerCase().contains("reloaded")) {
+									activity.runOnUiThread(() -> {
+										if (activity instanceof MainActivity main) {
+											main.reloadWebView();
+										}
+										executor.execute(() -> {
+											try {
+												Thread.sleep(2000);
+											} catch (InterruptedException ignored) {
+											}
+											activity.runOnUiThread(() -> {
+												this.queuedId = null;
+												internalPlay(url, true);
+											});
+										});
+									});
+									return null;
+								}
+
 								Throwable error = cause;
 								activity.runOnUiThread(() -> {
 									if (!Objects.equals(this.queuedId, videoId)) return;
@@ -331,25 +368,25 @@ public class LitePlayer {
 
 	@NonNull
 	static ExtractionException classifyExtractionException(@NonNull Exception exception) {
-		if (containsException(exception, SignInConfirmNotBotException.class)) {
+		if (containsException(exception, AntiBotException.class)) {
 			return new LoginRequiredExtractionException(exception);
 		}
-		if (containsException(exception, org.schabi.newpipe.extractor.exceptions.ReCaptchaException.class)) {
+		if (containsException(exception, ReCaptchaException.class)) {
 			return new LoginRequiredExtractionException(exception);
 		}
-		if (containsException(exception, org.schabi.newpipe.extractor.exceptions.AgeRestrictedContentException.class)) {
+		if (containsException(exception, AgeRestrictedContentException.class)) {
 			return new ExtractionException("This video is age restricted and could not be extracted.", exception);
 		}
-		if (containsException(exception, org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException.class)
-						|| containsException(exception, org.schabi.newpipe.extractor.exceptions.UnsupportedContentInCountryException.class)) {
+		if (containsException(exception, GeographicRestrictionException.class)
+						|| containsException(exception, GeographicRestrictionException.class)) {
 			return new ExtractionException("This video is not available in your region.", exception);
 		}
-		if (containsException(exception, org.schabi.newpipe.extractor.exceptions.PrivateContentException.class)) {
+		if (containsException(exception, PrivateContentException.class)) {
 			return new ExtractionException("This video is private or requires permission.", exception);
 		}
-		if (containsException(exception, org.schabi.newpipe.extractor.exceptions.PaidContentException.class)
-						|| containsException(exception, org.schabi.newpipe.extractor.exceptions.YoutubeMusicPremiumContentException.class)
-						|| containsException(exception, org.schabi.newpipe.extractor.exceptions.ContentNotSupportedException.class)) {
+		if (containsException(exception, PaidContentException.class)
+						|| containsException(exception, YoutubeMusicPremiumContentException.class)
+						|| containsException(exception, ContentNotSupportedException.class)) {
 			return new ExtractionException("This video type is not supported.", exception);
 		}
 		if (containsException(exception, SocketTimeoutException.class)
@@ -361,8 +398,8 @@ public class LitePlayer {
 		if (containsException(exception, IOException.class)) {
 			return new ExtractionException("I/O error while extracting video info.", exception);
 		}
-		org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException unavailable =
-						firstException(exception, org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException.class);
+		ContentNotAvailableException unavailable =
+						firstException(exception, ContentNotAvailableException.class);
 		if (unavailable != null) {
 			return new ExtractionException(messageOrDefault(unavailable, "This video is not available."), exception);
 		}

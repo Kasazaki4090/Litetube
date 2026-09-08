@@ -94,7 +94,10 @@ public final class YoutubeExtractor {
 						gson,
 						auth);
 		NewPipe.init(downloader);
-		YoutubeStreamExtractor.setPoTokenProvider(litePoTokenProvider);
+		NewPipe.setYoutubePlayerClient("web");
+		NewPipe.setYoutubePoTokenResolver(litePoTokenProvider::resolvePoToken);
+		// PoToken resolver is now set globally in NewPipe
+		// YoutubeStreamExtractor.setPoTokenProvider(litePoTokenProvider);
 	}
 
 	YoutubeExtractor(@NonNull Fetch play,
@@ -227,7 +230,7 @@ public final class YoutubeExtractor {
 		Description description = streamInfo.getDescription();
 		Date uploadDate = streamInfo.getUploadDate() == null
 						? null
-						: Date.from(streamInfo.getUploadDate().getInstant());
+						: Date.from(streamInfo.getUploadDate().offsetDateTime().toInstant());
 		String thumbnailUrl = getBestImageUrl(streamInfo.getThumbnails());
 		StreamCatalog catalog = buildCatalog(streamInfo, extracted.youtube());
 		DeliveryCatalog deliveries = buildDeliveries(catalog);

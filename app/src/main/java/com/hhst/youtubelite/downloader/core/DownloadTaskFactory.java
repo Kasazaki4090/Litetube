@@ -9,7 +9,7 @@ import com.hhst.youtubelite.extractor.VideoDetails;
 
 import org.schabi.newpipe.extractor.MediaFormat;
 import org.schabi.newpipe.extractor.stream.AudioStream;
-import org.schabi.newpipe.extractor.stream.AudioTrackType;
+
 import org.schabi.newpipe.extractor.stream.SubtitlesStream;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 
@@ -250,7 +250,7 @@ public final class DownloadTaskFactory {
 		List<AudioStream> streams = catalog.getAudioStreams();
 		if (streams.isEmpty()) return null;
 		for (AudioStream stream : streams) {
-			if (stream.getAudioTrackType() == AudioTrackType.ORIGINAL) return stream;
+			if ("original".equalsIgnoreCase(stream.getAudioTrackId())) return stream;
 		}
 		return streams.get(0);
 	}

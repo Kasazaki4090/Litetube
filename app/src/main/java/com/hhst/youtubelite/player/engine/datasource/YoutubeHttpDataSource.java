@@ -10,7 +10,7 @@ import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getIosUserAgent;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isAndroidStreamingUrl;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isIosStreamingUrl;
-import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isWebEmbeddedPlayerStreamingUrl;
+import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isTvHtml5SimplyEmbeddedPlayerStreamingUrl;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isWebStreamingUrl;
 
 import android.net.Uri;
@@ -369,7 +369,7 @@ public final class YoutubeHttpDataSource extends BaseDataSource implements HttpD
 		}
 
 		boolean isWebStreamingRequest = isWebStreamingUrl(requestUrl);
-		boolean isWebEmbeddedStreamingRequest = isWebEmbeddedPlayerStreamingUrl(requestUrl);
+		boolean isWebEmbeddedStreamingRequest = isTvHtml5SimplyEmbeddedPlayerStreamingUrl(requestUrl);
 		boolean isWebClientRequest = isWebStreamingRequest || isWebEmbeddedStreamingRequest;
 
 		if (isWebClientRequest) {

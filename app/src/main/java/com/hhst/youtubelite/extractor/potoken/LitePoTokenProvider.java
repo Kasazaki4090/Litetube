@@ -2,8 +2,8 @@ package com.hhst.youtubelite.extractor.potoken;
 
 import androidx.annotation.Nullable;
 
-import org.schabi.newpipe.extractor.services.youtube.PoTokenProvider;
-import org.schabi.newpipe.extractor.services.youtube.PoTokenResult;
+import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper;
+import org.schabi.newpipe.extractor.services.youtube.YoutubePoTokenResult;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -12,7 +12,7 @@ import javax.inject.Singleton;
  * Provider that feeds PoToken data into extraction.
  */
 @Singleton
-public final class LitePoTokenProvider implements PoTokenProvider {
+public final class LitePoTokenProvider {
 	private final PoTokenCoordinator coordinator;
 
 	@Inject
@@ -20,25 +20,38 @@ public final class LitePoTokenProvider implements PoTokenProvider {
 		this.coordinator = coordinator;
 	}
 
-	@Override
+	@Nullable
+	public YoutubePoTokenResult resolvePoToken(String videoId) {
+		PoTokenResult result = coordinator.getWebClientPoToken(videoId);
+		if (result == null || result.getPlayerPoToken() == null) {
+			return null;
+		}
+		try {
+			String clientVersion = YoutubeParsingHelper.getClientVersion();
+			return new YoutubePoTokenResult(
+							result.getVisitorData() != null ? result.getVisitorData() : "",
+							clientVersion,
+							result.getPlayerPoToken());
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
 	@Nullable
 	public PoTokenResult getWebClientPoToken(String videoId) {
 		return coordinator.getWebClientPoToken(videoId);
 	}
 
-	@Override
 	@Nullable
 	public PoTokenResult getWebEmbedClientPoToken(String videoId) {
 		return null;
 	}
 
-	@Override
 	@Nullable
 	public PoTokenResult getAndroidClientPoToken(String videoId) {
 		return coordinator.getAndroidClientPoToken(videoId);
 	}
 
-	@Override
 	@Nullable
 	public PoTokenResult getIosClientPoToken(String videoId) {
 		return coordinator.getIosClientPoToken(videoId);

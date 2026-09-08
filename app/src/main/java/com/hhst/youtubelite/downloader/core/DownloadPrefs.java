@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 import com.tencent.mmkv.MMKV;
 
 import org.schabi.newpipe.extractor.stream.AudioStream;
-import org.schabi.newpipe.extractor.stream.AudioTrackType;
+
 import org.schabi.newpipe.extractor.stream.SubtitlesStream;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 
@@ -158,7 +158,7 @@ public final class DownloadPrefs {
 		}
 
 		for (AudioStream stream : streams) {
-			if (stream.getAudioTrackType() == AudioTrackType.ORIGINAL) return stream;
+			if ("original".equalsIgnoreCase(stream.getAudioTrackId())) return stream;
 		}
 		return streams.get(0);
 	}

@@ -16,6 +16,8 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
@@ -33,6 +35,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleEventObserver;
+import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.util.UnstableApi;
@@ -69,6 +72,7 @@ import com.hhst.youtubelite.util.ToastUtils;
 import com.hhst.youtubelite.util.UrlUtils;
 import com.hhst.youtubelite.util.ViewUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -253,7 +257,7 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 	}
 
 	@Override
-	public void onStateChanged(@NonNull androidx.lifecycle.LifecycleOwner source,
+	public void onStateChanged(@NonNull LifecycleOwner source,
 	                           @NonNull Lifecycle.Event event) {
 		if (event != Lifecycle.Event.ON_STOP
 						|| player == null
@@ -332,7 +336,7 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 	private void showQueueBottomSheet() {
 		if (DeviceUtils.isInPictureInPictureMode(this)) return;
 		BottomSheetDialog dialog = new BottomSheetDialog(this);
-		View sheetView = getLayoutInflater().inflate(R.layout.bottom_sheet_queue, new android.widget.FrameLayout(this), false);
+		View sheetView = getLayoutInflater().inflate(R.layout.bottom_sheet_queue, new FrameLayout(this), false);
 		dialog.setContentView(sheetView);
 
 		ImageButton closeButton = sheetView.findViewById(R.id.btn_queue_close);
@@ -396,7 +400,7 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 				ToastUtils.show(this, R.string.queue_download_unavailable);
 				return;
 			}
-			List<PlaylistDownloadItem> dialogItems = new java.util.ArrayList<>();
+			List<PlaylistDownloadItem> dialogItems = new ArrayList<>();
 			for (int i = 0; i < items.size(); i++) {
 				QueueItem queueItem = items.get(i);
 				String videoId = queueItem.getVideoId() != null
@@ -443,9 +447,9 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 						.setNegativeButton(R.string.cancel, null)
 						.show());
 		dialog.setOnShowListener(ignored -> {
-			final android.widget.FrameLayout bottomSheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+			final FrameLayout bottomSheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
 			if (bottomSheet == null) return;
-			BottomSheetBehavior<android.widget.FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+			BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
 			sheet.behavior = behavior;
 			int sheetBasePaddingBottom = sheetView.getPaddingBottom();
 			int recyclerBasePaddingBottom = recyclerView.getPaddingBottom();
@@ -482,12 +486,12 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 			} else {
 				maxSheetHeight = mainHeight - playerBottom;
 			}
-			final android.view.ViewGroup.LayoutParams bottomSheetLayoutParams = bottomSheet.getLayoutParams();
+			final ViewGroup.LayoutParams bottomSheetLayoutParams = bottomSheet.getLayoutParams();
 			if (bottomSheetLayoutParams != null && maxSheetHeight > 0) {
 				bottomSheetLayoutParams.height = maxSheetHeight;
 				bottomSheet.setLayoutParams(bottomSheetLayoutParams);
 			}
-			final android.view.ViewGroup.LayoutParams sheetLayoutParams = sheetView.getLayoutParams();
+			final ViewGroup.LayoutParams sheetLayoutParams = sheetView.getLayoutParams();
 			if (sheetLayoutParams != null && maxSheetHeight > 0) {
 				sheetLayoutParams.height = maxSheetHeight;
 				sheetView.setLayoutParams(sheetLayoutParams);
@@ -625,6 +629,15 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 				ToastUtils.show(this, R.string.press_back_again_to_exit);
 			}
 		}
+	}
+
+	public void reloadWebView() {
+		runOnUiThread(() -> {
+			YoutubeWebview webView = getWebView();
+			if (webView != null) {
+				webView.reload();
+			}
+		});
 	}
 
 	public void showHint(@NonNull String text, long durationMs) {
@@ -836,7 +849,7 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 		@NonNull
 		private final QueueAdapter adapter;
 		@Nullable
-		private BottomSheetBehavior<android.widget.FrameLayout> behavior;
+		private BottomSheetBehavior<FrameLayout> behavior;
 		private boolean scrollPending;
 
 		private QueueSheet(@NonNull SwitchMaterial enabledSwitch,

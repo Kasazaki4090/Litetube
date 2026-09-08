@@ -8,7 +8,7 @@ import androidx.media3.common.util.UnstableApi;
 import com.hhst.youtubelite.player.common.PlayerUtils;
 
 import org.schabi.newpipe.extractor.stream.AudioStream;
-import org.schabi.newpipe.extractor.stream.AudioTrackType;
+
 import org.schabi.newpipe.extractor.stream.StreamType;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 
@@ -156,7 +156,7 @@ public final class PlaybackPlanner {
 	}
 
 	private static boolean isOriginal(@NonNull AudioStream stream) {
-		return stream.getAudioTrackType() == AudioTrackType.ORIGINAL
+		return "original".equalsIgnoreCase(stream.getAudioTrackId())
 						|| (stream.getAudioTrackName() != null
 						&& stream.getAudioTrackName().toLowerCase(Locale.ROOT).contains("original"));
 	}
@@ -167,7 +167,7 @@ public final class PlaybackPlanner {
 			return false;
 		}
 		return stream.getAudioLocale() != null
-						&& preferredLanguage.equalsIgnoreCase(stream.getAudioLocale().getLanguage());
+						&& preferredLanguage.equalsIgnoreCase(Locale.forLanguageTag(stream.getAudioLocale()).getLanguage());
 	}
 
 	private static int audioBitrate(@NonNull AudioStream stream) {

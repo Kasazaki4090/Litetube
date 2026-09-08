@@ -9,7 +9,6 @@ import org.junit.Test;
 import org.schabi.newpipe.extractor.MediaFormat;
 import org.schabi.newpipe.extractor.services.youtube.ItagItem;
 import org.schabi.newpipe.extractor.stream.AudioStream;
-import org.schabi.newpipe.extractor.stream.AudioTrackType;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 
 import java.util.List;
@@ -45,9 +44,9 @@ public class DownloadDialogTest {
 
 	@Test
 	public void audioTrackChoices_collapsesDuplicateTracksButKeepsDifferentLanguages() {
-		AudioStream english = audio("en", "English", Locale.ENGLISH, AudioTrackType.ORIGINAL);
-		AudioStream duplicateEnglish = audio("en", "English", Locale.ENGLISH, AudioTrackType.ORIGINAL);
-		AudioStream korean = audio("ko", "Korean", Locale.KOREAN, AudioTrackType.DUBBED);
+		AudioStream english = audio("en", "English", Locale.ENGLISH, true);
+		AudioStream duplicateEnglish = audio("en", "English", Locale.ENGLISH, true);
+		AudioStream korean = audio("ko", "Korean", Locale.KOREAN, false);
 
 		List<AudioStream> choices = DownloadDialog.audioTrackChoices(List.of(english, duplicateEnglish, korean));
 
@@ -70,15 +69,14 @@ public class DownloadDialogTest {
 		return stream;
 	}
 
-	private static AudioStream audio(String id, String name, Locale locale, AudioTrackType type) {
+	private static AudioStream audio(String id, String name, Locale locale, boolean isOriginal) {
 		AudioStream stream = mock(AudioStream.class);
 		ItagItem item = mock(ItagItem.class);
 		when(item.getContentLength()).thenReturn(1_000_000L);
 		when(stream.getFormat()).thenReturn(MediaFormat.M4A);
-		when(stream.getAudioTrackId()).thenReturn(id);
+		when(stream.getAudioTrackId()).thenReturn(isOriginal ? "original" : id);
 		when(stream.getAudioTrackName()).thenReturn(name);
-		when(stream.getAudioLocale()).thenReturn(locale);
-		when(stream.getAudioTrackType()).thenReturn(type);
+		when(stream.getAudioLocale()).thenReturn(locale.toLanguageTag());
 		when(stream.getAverageBitrate()).thenReturn(128);
 		when(stream.getItagItem()).thenReturn(item);
 		return stream;

@@ -5,12 +5,15 @@ import androidx.annotation.Nullable;
 
 import com.hhst.youtubelite.Constant;
 
+import org.schabi.newpipe.extractor.downloader.CancellableCall;
 import org.schabi.newpipe.extractor.downloader.Downloader;
+import org.schabi.newpipe.extractor.exceptions.ExtractionException;
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,6 +28,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 import okhttp3.Call;
+import okhttp3.Callback;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -37,6 +41,8 @@ import okhttp3.ResponseBody;
 @Singleton
 public final class DownloaderImpl extends Downloader {
 	private static final String YOUTUBE_RESTRICTED_MODE_COOKIE = "PREF=f2=8000000";
+	private static final String YOUTUBE_WEB_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+					+ "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 	private final OkHttpClient client;
 	private final ExtractionSessionScope scope;
@@ -55,7 +61,7 @@ public final class DownloaderImpl extends Downloader {
 
 	@NonNull
 	<T> T withExtractionSession(@NonNull StreamInfoSupplier<T> supplier,
-	                            @Nullable ExtractionSession session) throws org.schabi.newpipe.extractor.exceptions.ExtractionException, IOException {
+	                            @Nullable ExtractionSession session) throws ExtractionException, IOException {
 		ExtractionSession previous = scope.get();
 		scope.set(session);
 		try {
@@ -75,14 +81,17 @@ public final class DownloaderImpl extends Downloader {
 		RequestBody requestBody = null;
 		if (dataToSend != null) requestBody = RequestBody.create(dataToSend);
 
-		final Request.Builder builder = new Request.Builder().url(url).method(httpMethod, requestBody).header("User-Agent", Constant.USER_AGENT);
+		String userAgent = Constant.USER_AGENT;
+		if (url.contains("youtube.com") || url.contains("googlevideo.com")) {
+			userAgent = YOUTUBE_WEB_USER_AGENT;
+		}
+		final Request.Builder builder = new Request.Builder().url(url).method(httpMethod, requestBody).header("User-Agent", userAgent);
 		ExtractionSession session = scope.get();
 		AuthContext auth = session != null ? session.getAuth() : null;
 		String mergedCookies = mergeCookiesForUrl(
 						url,
 						auth != null ? auth.cookies() : null);
 
-		// Override with headers from request
 		if (headers != null) {
 			for (final Map.Entry<String, List<String>> entry : headers.entrySet()) {
 				String headerName = entry.getKey();
@@ -123,9 +132,10 @@ public final class DownloaderImpl extends Downloader {
 			String responseMessage = response.message();
 			final Map<String, List<String>> responseHeaders = response.headers().toMultimap();
 			ResponseBody responseBody = response.body();
-			String responseBodyString = responseBody.string();
+			byte[] responseBodyBytes = responseBody.bytes();
+			String responseBodyString = new String(responseBodyBytes, StandardCharsets.UTF_8);
 
-			return new org.schabi.newpipe.extractor.downloader.Response(responseCode, responseMessage, responseHeaders, responseBodyString, url);
+			return new org.schabi.newpipe.extractor.downloader.Response(responseCode, responseMessage, responseHeaders, responseBodyString, responseBodyBytes, url);
 		} catch (IOException e) {
 			if (session != null && session.isCancelled()) {
 				InterruptedIOException interrupted = new InterruptedIOException("Extraction canceled");
@@ -134,6 +144,96 @@ public final class DownloaderImpl extends Downloader {
 			}
 			throw e;
 		}
+	}
+
+	@Override
+	public CancellableCall executeAsync(@NonNull org.schabi.newpipe.extractor.downloader.Request request, @NonNull AsyncCallback callback) {
+		String httpMethod = request.httpMethod() != null ? request.httpMethod() : "GET";
+		String url = request.url();
+		final Map<String, List<String>> headers = request.headers();
+		byte[] dataToSend = request.dataToSend();
+
+		RequestBody requestBody = null;
+		if (dataToSend != null) requestBody = RequestBody.create(dataToSend);
+
+		String userAgent = Constant.USER_AGENT;
+		if (url.contains("youtube.com") || url.contains("googlevideo.com")) {
+			userAgent = YOUTUBE_WEB_USER_AGENT;
+		}
+		final Request.Builder builder = new Request.Builder().url(url).method(httpMethod, requestBody).header("User-Agent", userAgent);
+		ExtractionSession session = scope.get();
+		AuthContext auth = session != null ? session.getAuth() : null;
+		String mergedCookies = mergeCookiesForUrl(
+						url,
+						auth != null ? auth.cookies() : null);
+
+		if (headers != null) {
+			for (final Map.Entry<String, List<String>> entry : headers.entrySet()) {
+				String headerName = entry.getKey();
+				if ("cookie".equalsIgnoreCase(headerName)) {
+					mergedCookies = mergeCookieHeaders(
+									mergedCookies,
+									String.join("; ", entry.getValue()));
+					continue;
+				}
+				builder.removeHeader(headerName);
+				for (String value : entry.getValue()) {
+					builder.addHeader(headerName, value);
+				}
+			}
+		}
+		YoutubeAuth.Result authHeaders = YoutubeAuth.headers(url, auth, System.currentTimeMillis());
+		for (Map.Entry<String, String> entry : authHeaders.headers().entrySet()) {
+			if (hasHeader(headers, entry.getKey())) {
+				continue;
+			}
+			builder.header(entry.getKey(), entry.getValue());
+		}
+		if (!mergedCookies.isEmpty()) {
+			builder.header("Cookie", mergedCookies);
+		}
+
+		Call call = client.newCall(builder.build());
+		if (session != null) {
+			session.register(call::cancel);
+		}
+
+		final CancellableCall cancellableCall = new CancellableCall(call);
+		call.enqueue(new Callback() {
+			@Override
+			public void onFailure(@NonNull Call call, @NonNull IOException e) {
+				callback.onError(e);
+				cancellableCall.setFinished();
+			}
+
+			@Override
+			public void onResponse(@NonNull Call call, @NonNull Response response) {
+				if (response.code() == 429) {
+					callback.onError(new ReCaptchaException("ReCaptcha Challenge requested", url));
+					cancellableCall.setFinished();
+					response.close();
+					return;
+				}
+
+				try {
+					int responseCode = response.code();
+					String responseMessage = response.message();
+					final Map<String, List<String>> responseHeaders = response.headers().toMultimap();
+					ResponseBody responseBody = response.body();
+					byte[] responseBodyBytes = responseBody.bytes();
+					String responseBodyString = new String(responseBodyBytes, StandardCharsets.UTF_8);
+
+					callback.onSuccess(new org.schabi.newpipe.extractor.downloader.Response(responseCode, responseMessage, responseHeaders, responseBodyString, responseBodyBytes, url));
+				} catch (Exception e) {
+					callback.onError(e);
+				} finally {
+					cancellableCall.setFinished();
+					response.close();
+				}
+			}
+		});
+
+		return cancellableCall;
 	}
 
 	@NonNull
@@ -204,6 +304,6 @@ public final class DownloaderImpl extends Downloader {
  */
 	@FunctionalInterface
 	interface StreamInfoSupplier<T> {
-		T get() throws org.schabi.newpipe.extractor.exceptions.ExtractionException, IOException;
+		T get() throws ExtractionException, IOException;
 	}
 }
