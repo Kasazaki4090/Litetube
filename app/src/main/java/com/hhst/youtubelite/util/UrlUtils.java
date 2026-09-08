@@ -27,6 +27,7 @@ public final class UrlUtils {
 					"ytimg.com",
 					"accounts.google",
 					"accounts.google.com",
+					"google.com",
 					"googleusercontent.com",
 					"apis.google.com",
 					"gstatic.com"
@@ -137,7 +138,8 @@ public final class UrlUtils {
 	private static boolean isGoogleAccountsHost(@NonNull String lowerHost) {
 		if (lowerHost.equals("accounts.google")
 						|| lowerHost.equals("accounts.google.com")
-						|| lowerHost.equals("accounts.youtube.com")) {
+						|| lowerHost.equals("accounts.youtube.com")
+						|| lowerHost.equals("myaccount.google.com")) {
 			return true;
 		}
 		// Country variants like accounts.google.co.in: require the host to actually end

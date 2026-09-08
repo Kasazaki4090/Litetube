@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Looper;
+import android.os.Message;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -266,7 +267,7 @@ public class YoutubeWebview extends WebView {
 
 	public boolean isPoTokenReadyCandidate() {
 		String url = frame.url;
-		return initialized && frame.finished && UrlUtils.isAllowedUrl(url) && !UrlUtils.isGoogleAccountsUrl(url) && !url.startsWith("file:");
+		return initialized && frame.finished && (UrlUtils.isAllowedUrl(url) || (url != null && url.contains("www.youtube.com"))) && !UrlUtils.isGoogleAccountsUrl(url) && !url.startsWith("file:");
 	}
 
 	@Override
@@ -321,9 +322,13 @@ public class YoutubeWebview extends WebView {
 		WebView.setWebContentsDebuggingEnabled(true);
 
 		CookieManager.getInstance().setAcceptCookie(true);
+		CookieManager.getInstance().setAcceptThirdPartyCookies(this, true);
 
 		WebSettings settings = getSettings();
 		settings.setJavaScriptEnabled(true);
+		settings.setSupportMultipleWindows(true);
+		settings.setJavaScriptCanOpenWindowsAutomatically(true);
+		settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 		settings.setDatabaseEnabled(true);
 		settings.setDomStorageEnabled(true);
 		settings.setCacheMode(WebSettings.LOAD_DEFAULT);
@@ -335,7 +340,7 @@ public class YoutubeWebview extends WebView {
 		settings.setMediaPlaybackRequiresUserGesture(false);
 		settings.setAllowFileAccess(true);
 		settings.setAllowContentAccess(true);
-		settings.setUserAgentString("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+		settings.setUserAgentString(Constant.USER_AGENT);
 
 		// Performance optimizations
 		settings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
@@ -385,6 +390,14 @@ public class YoutubeWebview extends WebView {
 			@Override
 			public void onPageStarted(@NonNull WebView view, @NonNull String url, @Nullable Bitmap favicon) {
 				super.onPageStarted(view, url, favicon);
+
+				// Use default User-Agent for Google accounts to avoid "insecure browser" or redirect issues
+				if (UrlUtils.isGoogleAccountsUrl(url)) {
+					view.getSettings().setUserAgentString(null);
+				} else {
+					view.getSettings().setUserAgentString(Constant.USER_AGENT);
+				}
+
 				// Force cookie consent dialog above native player (only when visible)
 				evaluateJavascript(
 					"(function(){" +
@@ -410,7 +423,14 @@ public class YoutubeWebview extends WebView {
 				super.onPageFinished(view, url);
 				frame.finished = true;
 				frame.url = url;
+				CookieManager.getInstance().flush();
 				evaluateJavascript("window.dispatchEvent(new Event('onPageFinished'));", null);
+
+				// Auto-redirect back home if login seems finished but stuck
+				if (UrlUtils.isGoogleAccountsUrl(url) && (url.contains("CloseWindow") || url.contains("embedded/setup/v2/confirm"))) {
+					postDelayed(() -> loadUrl(Constant.HOME_URL), 500L);
+				}
+
 				injectJavaScript(url);
 				refreshPoTokenContext();
 				if (onPageFinishedListener != null) onPageFinishedListener.accept(url);
@@ -556,6 +576,32 @@ public class YoutubeWebview extends WebView {
 			@Override
 			public Bitmap getDefaultVideoPoster() {
 				return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+			}
+
+			@Override
+			public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+				// Handle popups (like Google account selection or 2FA prompts that open in new window)
+				// by loading them in the same WebView.
+				HitTestResult result = view.getHitTestResult();
+				String data = result.getExtra();
+				if (data != null) {
+					view.loadUrl(data);
+				} else {
+					// If it's a window.open() without a specific URL yet (common in OAuth),
+					// we can't easily intercept the URL here, so we let the message carry the transport.
+					WebView newWebView = new WebView(view.getContext());
+					newWebView.setWebViewClient(new WebViewClient() {
+						@Override
+						public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+							YoutubeWebview.this.loadUrl(request.getUrl().toString());
+							return true;
+						}
+					});
+					WebViewTransport transport = (WebViewTransport) resultMsg.obj;
+					transport.setWebView(newWebView);
+					resultMsg.sendToTarget();
+				}
+				return true;
 			}
 
 			@Override

@@ -1,10 +1,5 @@
 package com.hhst.youtubelite.downloader.core.impl;
 
-import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getAndroidUserAgent;
-import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.getIosUserAgent;
-import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isAndroidStreamingUrl;
-import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isIosStreamingUrl;
-import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isTvHtml5SimplyEmbeddedPlayerStreamingUrl;
 import static org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper.isWebStreamingUrl;
 
 import androidx.annotation.NonNull;
@@ -47,24 +42,6 @@ import okhttp3.Response;
  */
 @Singleton
 public class StreamDownloaderImpl implements StreamDownloader {
-	/**
-	 * User-Agent of the YouTube VR (Oculus) client. Streaming URLs issued to the ANDROID_VR
-	 * client must be requested with this User-Agent: googlevideo validates that the User-Agent
-	 * matches the client the URL was generated for and answers HTTP 403 on a mismatch (the
-	 * regular Android app User-Agent is rejected for ANDROID_VR URLs). Mirrors
-	 * {@link com.hhst.youtubelite.player.engine.datasource.YoutubeHttpDataSource}.
-	 */
-	private static final String YOUTUBE_ANDROID_VR_USER_AGENT =
-			"com.google.android.apps.youtube.vr.oculus/1.65.10 "
-					+ "(Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
-	/**
-	 * Desktop Chrome User-Agent for web-client (WEB / WEB_EMBEDDED_PLAYER) streaming URLs.
-	 * The Android WebView default User-Agent is a known trigger for HTTP 403 responses from
-	 * googlevideo on web-client URLs.
-	 */
-	private static final String YOUTUBE_WEB_USER_AGENT =
-			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-					+ "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 	/**
 	 * User-Agent of the YouTube TVHTML5 client (smart TVs / game consoles). Streaming URLs
 	 * issued to the TVHTML5 client must be requested with this User-Agent: googlevideo
@@ -112,17 +89,6 @@ public class StreamDownloaderImpl implements StreamDownloader {
 	}
 
 	/**
-	 * Checks if a streaming URL was issued to the {@code ANDROID_VR} (YouTube VR) client.
-	 * The library's {@code isAndroidStreamingUrl} also matches {@code ANDROID_VR} URLs
-	 * (substring match on {@code &c=ANDROID}), so this must be checked before it: the VR
-	 * client has its own dedicated User-Agent. Mirrors
-	 * {@link com.hhst.youtubelite.player.engine.datasource.YoutubeHttpDataSource}.
-	 */
-	private static boolean isAndroidVrStreamingUrl(@NonNull String url) {
-		return url.contains("&c=ANDROID_VR") || url.contains("?c=ANDROID_VR");
-	}
-
-	/**
 	 * Checks if a streaming URL was issued to the {@code TVHTML5} (YouTube on smart TVs)
 	 * client. The extractor has no helper for this client, so it is detected directly from
 	 * the {@code c=TVHTML5} query parameter; that pattern cannot collide with the WEB / IOS /
@@ -143,27 +109,27 @@ public class StreamDownloaderImpl implements StreamDownloader {
 	 */
 	static Map<String, String> clientHeaders(@NonNull String url) {
 		Map<String, String> headers = new LinkedHashMap<>();
-		boolean web = isWebStreamingUrl(url) || isTvHtml5SimplyEmbeddedPlayerStreamingUrl(url);
+		boolean web = isWebStreamingUrl(url);
 		if (web) {
 			headers.put("Origin", "https://www.youtube.com");
 			headers.put("Referer", "https://www.youtube.com");
 			headers.put("Sec-Fetch-Dest", "empty");
 			headers.put("Sec-Fetch-Mode", "cors");
 			headers.put("Sec-Fetch-Site", "cross-site");
-			headers.put("User-Agent", YOUTUBE_WEB_USER_AGENT);
+			// Default to a web-friendly UA if we don't have one, but mirrors the
+			// extractor's DownloaderImpl logic by using a desktop UA for these.
+			headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+							+ "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
 			return headers;
 		}
 		String userAgent;
-		if (isAndroidVrStreamingUrl(url)) {
-			userAgent = YOUTUBE_ANDROID_VR_USER_AGENT;
-		} else if (isAndroidStreamingUrl(url)) {
-			userAgent = getAndroidUserAgent(null);
-		} else if (isIosStreamingUrl(url)) {
-			userAgent = getIosUserAgent(null);
-		} else if (isTvHtml5StreamingUrl(url)) {
+		if (isTvHtml5StreamingUrl(url)) {
 			userAgent = YOUTUBE_TVHTML5_USER_AGENT;
 		} else {
-			userAgent = YOUTUBE_WEB_USER_AGENT;
+			// For all other clients (mweb, etc.), use the desktop UA for now to match
+			// the DownloaderImpl logic for youtube.com/googlevideo.com URLs.
+			userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+							+ "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 		}
 		headers.put("User-Agent", userAgent);
 		return headers;

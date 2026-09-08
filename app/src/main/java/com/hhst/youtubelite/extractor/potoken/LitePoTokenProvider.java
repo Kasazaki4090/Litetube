@@ -46,14 +46,4 @@ public final class LitePoTokenProvider {
 	public PoTokenResult getWebEmbedClientPoToken(String videoId) {
 		return null;
 	}
-
-	@Nullable
-	public PoTokenResult getAndroidClientPoToken(String videoId) {
-		return coordinator.getAndroidClientPoToken(videoId);
-	}
-
-	@Nullable
-	public PoTokenResult getIosClientPoToken(String videoId) {
-		return coordinator.getIosClientPoToken(videoId);
-	}
 }

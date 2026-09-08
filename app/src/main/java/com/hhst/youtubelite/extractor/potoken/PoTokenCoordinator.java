@@ -112,25 +112,6 @@ public final class PoTokenCoordinator {
 	}
 
 	@Nullable
-	public PoTokenResult getAndroidClientPoToken(@NonNull String videoId) {
-		return load("android", videoId);
-	}
-
-	@Nullable
-	public PoTokenResult getIosClientPoToken(@NonNull String videoId) {
-		String player = read("ios", videoId, "player");
-		String gvs = read("ios", videoId, "gvs");
-		if (player == null || gvs == null) {
-			return null;
-		}
-		String visitor = read("ios", videoId, "visitor");
-		return new PoTokenResult(
-						visitor != null ? visitor : fetchIosVisitorData(),
-						player,
-						gvs);
-	}
-
-	@Nullable
 	private PoTokenResult mintClientPoToken(long hostGeneration,
 	                                        @NonNull String videoId,
 	                                        @NonNull String visitorData) {
@@ -159,36 +140,6 @@ public final class PoTokenCoordinator {
 						visitorData,
 						playerPoToken,
 						streamingPoToken);
-	}
-
-	@Nullable
-	private PoTokenResult load(@NonNull String client,
-	                           @NonNull String videoId) {
-		String player = read(client, videoId, "player");
-		if (player == null) {
-			return null;
-		}
-		String visitor = read(client, videoId, "visitor");
-		String gvs = read(client, videoId, "gvs");
-		return new PoTokenResult(
-						visitor != null ? visitor : fetchVisitorData(),
-						player,
-						gvs != null ? gvs : player);
-	}
-
-	@Nullable
-	private String read(@NonNull String client,
-	                    @NonNull String videoId,
-	                    @NonNull String kind) {
-		String value = kv.decodeString(KEY_PREFIX + client + "." + videoId + "." + kind, null);
-		if (value == null) {
-			value = kv.decodeString(KEY_PREFIX + client + "." + kind, null);
-		}
-		if (value == null) {
-			return null;
-		}
-		String trimmed = value.trim();
-		return trimmed.isEmpty() ? null : trimmed;
 	}
 
 	@Nullable
@@ -277,29 +228,6 @@ public final class PoTokenCoordinator {
 		} catch (Exception ignored) {
 			return null;
 		}
-	}
-
-	@Nullable
-	private String fetchIosVisitorData() {
-		try {
-			return YoutubeParsingHelper.getVisitorDataFromInnertube(
-							InnertubeClientRequestInfo.ofIosClient(),
-							Localization.DEFAULT,
-							ContentCountry.DEFAULT,
-							getMobileClientHeaders(YoutubeParsingHelper.getIosUserAgent(Localization.DEFAULT)),
-							YoutubeParsingHelper.YOUTUBEI_V1_URL,
-							null,
-							false);
-		} catch (Exception ignored) {
-			return null;
-		}
-	}
-
-	@NonNull
-	private static Map<String, List<String>> getMobileClientHeaders(@NonNull String userAgent) {
-		return Map.of(
-						"User-Agent", List.of(userAgent),
-						"X-Goog-Api-Format-Version", List.of("2"));
 	}
 
 	@Nullable
