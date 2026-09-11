@@ -737,7 +737,7 @@ public class Controller {
 				showVideoDetails();
 				bottomSheetDialog.dismiss();
 			});
-			bottomSheetDialog.show();
+			ViewUtils.showFullscreenDialog(bottomSheetDialog, state.isFullscreen());
 		});
 	}
 
@@ -756,11 +756,12 @@ public class Controller {
 			for (int i = 0; i < audioTracks.size(); i++)
 				if (audioTracks.get(i).getContent().equals(sel.getContent())) checked = i;
 		}
-		new MaterialAlertDialogBuilder(activity).setTitle(R.string.audio_track).setAdapter(getAdapter(checked, options), (dialog, which) -> {
+		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity).setTitle(R.string.audio_track).setAdapter(getAdapter(checked, options), (dialog, which) -> {
 			engine.setAudioTrack(audioTracks.get(which));
 			showHint(options[which], com.hhst.youtubelite.player.common.Constant.HINT_HIDE_DELAY_MS);
 			hideControlsAutomatically();
-		}).setNegativeButton(R.string.cancel, null).show();
+		}).setNegativeButton(R.string.cancel, null);
+		ViewUtils.showFullscreenDialog(builder.create(), state.isFullscreen());
 	}
 
 	@NonNull
@@ -805,7 +806,8 @@ public class Controller {
 			DeviceUtils.copyToClipboard(activity, "Video Details", info[0]);
 			showHint(activity.getString(R.string.debug_info_copied), com.hhst.youtubelite.player.common.Constant.HINT_HIDE_DELAY_MS);
 		});
-		AlertDialog dialog = builder.show();
+		AlertDialog dialog = builder.create();
+		ViewUtils.showFullscreenDialog(dialog, state.isFullscreen());
 		hideControlsAutomatically();
 		Handler updateHandler = new Handler(Looper.getMainLooper());
 		updateHandler.post(new Runnable() {
@@ -1252,12 +1254,13 @@ public class Controller {
 		String[] opts = {activity.getString(R.string.resize_fit), activity.getString(R.string.resize_fill), activity.getString(R.string.resize_zoom), activity.getString(R.string.resize_fixed_width), activity.getString(R.string.resize_fixed_height)};
 		int[] modes = {AspectRatioFrameLayout.RESIZE_MODE_FIT, AspectRatioFrameLayout.RESIZE_MODE_FILL, AspectRatioFrameLayout.RESIZE_MODE_ZOOM, AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH, AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT};
 		ListAdapter adapter = getResizeAdapter(modes, opts);
-		new MaterialAlertDialogBuilder(activity).setTitle(R.string.resize_mode).setAdapter(adapter, (d, w) -> {
+		MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity).setTitle(R.string.resize_mode).setAdapter(adapter, (d, w) -> {
 			playerView.setResizeMode(modes[w]);
 			prefs.setResizeMode(modes[w]);
 			showHint(opts[w], com.hhst.youtubelite.player.common.Constant.HINT_HIDE_DELAY_MS);
 			hideControlsAutomatically();
-		}).setNegativeButton(R.string.cancel, null).show();
+		}).setNegativeButton(R.string.cancel, null);
+		ViewUtils.showFullscreenDialog(builder.create(), state.isFullscreen());
 	}
 
 	@NonNull

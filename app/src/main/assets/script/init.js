@@ -446,6 +446,7 @@
 
                 lite.setRefreshLayoutEnabled(ctx.isHomeLike);
                 const results = [
+                    OpenApp.run(),
                     Search.run(ctx),
                     Player.run(ctx),
                     Gesture.run(ctx),
@@ -467,6 +468,22 @@
                     } else {
                         container.style.removeProperty('display');
                     }
+                });
+            }
+        };
+
+        // Hides YouTube's native "Open App" prompt shown in the header on mobile web.
+        const OpenApp = {
+            run() {
+                document.querySelectorAll('ytd-app-banner-renderer, yt-app-promo-renderer, [id="app-banner"], [class*="app-banner" i], [class*="open-app" i]').forEach(el => {
+                    if (el instanceof HTMLElement) el.style.display = 'none';
+                });
+
+                document.querySelectorAll('a[href]').forEach(anchor => {
+                    const href = anchor.getAttribute('href') || '';
+                    if (!/com\.google\.android\.youtube/i.test(href)) return;
+                    const host = anchor.closest('tp-yt-paper-button, [role="button"]') ?? anchor;
+                    if (host instanceof HTMLElement) host.style.display = 'none';
                 });
             }
         };

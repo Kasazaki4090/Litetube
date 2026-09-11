@@ -507,7 +507,7 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 			}
 		});
 		renderQueueSheet(uiState());
-		dialog.show();
+		ViewUtils.showFullscreenDialog(dialog, player != null && player.isFullscreen());
 	}
 
 	@NonNull

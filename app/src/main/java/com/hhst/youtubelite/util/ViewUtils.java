@@ -1,8 +1,11 @@
 package com.hhst.youtubelite.util;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.content.Context;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.core.view.WindowCompat;
@@ -64,8 +67,18 @@ public final class ViewUtils {
 	 * @param fullscreen True to enter fullscreen, false to exit.
 	 */
 	public static void setFullscreen(@NonNull Activity activity, boolean fullscreen) {
+		setFullscreen(activity.getWindow(), fullscreen);
+	}
+
+	/**
+	 * Sets the system UI visibility for fullscreen mode on a specific window.
+	 *
+	 * @param window     The window whose controls are being changed.
+	 * @param fullscreen True to enter fullscreen, false to exit.
+	 */
+	public static void setFullscreen(@NonNull Window window, boolean fullscreen) {
 		WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
-						activity.getWindow(), activity.getWindow().getDecorView());
+						window, window.getDecorView());
 		if (fullscreen) {
 			controller.hide(WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.navigationBars());
 			controller.setSystemBarsBehavior(
@@ -73,6 +86,22 @@ public final class ViewUtils {
 		} else {
 			controller.show(WindowInsetsCompat.Type.systemBars());
 			controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_DEFAULT);
+		}
+	}
+
+	/**
+	 * Shows a dialog without bringing back the status bar if the activity is in fullscreen.
+	 */
+	public static void showFullscreenDialog(@NonNull Dialog dialog, boolean fullscreen) {
+		Window window = dialog.getWindow();
+		if (fullscreen && window != null) {
+			window.setFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+							WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+		}
+		dialog.show();
+		if (fullscreen && window != null) {
+			setFullscreen(window, true);
+			window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
 		}
 	}
 }

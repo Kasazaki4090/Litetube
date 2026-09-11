@@ -22,6 +22,7 @@ import com.hhst.youtubelite.player.LitePlayer;
 import com.hhst.youtubelite.player.queue.QueueItem;
 import com.hhst.youtubelite.player.queue.QueueRepository;
 import com.hhst.youtubelite.util.ToastUtils;
+import com.hhst.youtubelite.util.ViewUtils;
 import com.squareup.picasso.Picasso;
 
 import java.util.ArrayList;
@@ -92,7 +93,7 @@ public final class MediaItemMenuDialog {
 			new DownloadDialog(item.videoUrl(), context, extractor).show();
 		});
 
-		dialog.show();
+		ViewUtils.showFullscreenDialog(dialog, player.isFullscreen());
 	}
 
 	private void addToQueue() {
