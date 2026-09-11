@@ -176,4 +176,31 @@
     <string name="playlist_download_batch_segment_partial">Частично: %1$d</string>
     <string name="playlist_download_batch_segment_failed">Сбой: %1$d</string>
     <string name="playlist_download_started">Загрузка плейлиста начата</string>
+
+    <string name="preferred_subtitle_language">Предпочтительный язык субтитров</string>
+    <string name="remember_subtitle_language">Запомнить последний язык субтитров</string>
+    <string-array name="subtitle_languages">
+        <item>Авто</item>
+        <item>Китайский</item>
+        <item>Английский</item>
+        <item>Испанский</item>
+        <item>Французский</item>
+        <item>Немецкий</item>
+        <item>Японский</item>
+        <item>Корейский</item>
+        <item>Португальский</item>
+        <item>Русский</item>
+    </string-array>
+    <string-array name="subtitle_language_codes">
+        <item>auto</item>
+        <item>zh</item>
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>pt</item>
+        <item>ru</item>
+    </string-array>
 </resources>

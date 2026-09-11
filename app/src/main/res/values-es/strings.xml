@@ -197,4 +197,31 @@
     <string name="playlist_download_batch_segment_partial" tools:ignore="PluralsCandidate">%1$d parciales</string>
     <string name="playlist_download_batch_segment_failed" tools:ignore="PluralsCandidate">%1$d fallidos</string>
     <string name="playlist_download_started">Descarga de la lista de reproducción iniciada</string>
+
+    <string name="preferred_subtitle_language">Idioma de subtítulos preferido</string>
+    <string name="remember_subtitle_language">Recordar el último idioma de subtítulos</string>
+    <string-array name="subtitle_languages">
+        <item>Automático</item>
+        <item>Chino</item>
+        <item>Inglés</item>
+        <item>Español</item>
+        <item>Francés</item>
+        <item>Alemán</item>
+        <item>Japonés</item>
+        <item>Coreano</item>
+        <item>Portugués</item>
+        <item>Ruso</item>
+    </string-array>
+    <string-array name="subtitle_language_codes">
+        <item>auto</item>
+        <item>zh</item>
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>pt</item>
+        <item>ru</item>
+    </string-array>
 </resources>

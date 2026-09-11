@@ -176,4 +176,31 @@
     <string name="playlist_download_batch_segment_partial">%1$d partiel(s)</string>
     <string name="playlist_download_batch_segment_failed">%1$d échec(s)</string>
     <string name="playlist_download_started">Téléchargement de la liste de lecture lancé</string>
+
+    <string name="preferred_subtitle_language">Langue de sous-titres préférée</string>
+    <string name="remember_subtitle_language">Mémoriser la dernière langue de sous-titres</string>
+    <string-array name="subtitle_languages">
+        <item>Auto</item>
+        <item>Chinois</item>
+        <item>Anglais</item>
+        <item>Espagnol</item>
+        <item>Français</item>
+        <item>Allemand</item>
+        <item>Japonais</item>
+        <item>Coréen</item>
+        <item>Portugais</item>
+        <item>Russe</item>
+    </string-array>
+    <string-array name="subtitle_language_codes">
+        <item>auto</item>
+        <item>zh</item>
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>pt</item>
+        <item>ru</item>
+    </string-array>
 </resources>

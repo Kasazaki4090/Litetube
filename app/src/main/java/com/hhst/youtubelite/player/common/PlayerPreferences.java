@@ -123,6 +123,10 @@ public final class PlayerPreferences {
 		mmkv.encode(KEY_SUBTITLE_ENABLED, enabled);
 	}
 
+	public boolean isRememberSubtitleLanguageEnabled() {
+		return extensionManager.isEnabled(Constant.REMEMBER_SUBTITLE_LANGUAGE);
+	}
+
 	@Nullable
 	public String getSubtitleLanguage() {
 		return mmkv.decodeString(KEY_SUBTITLE_LANGUAGE, null);
@@ -130,6 +134,26 @@ public final class PlayerPreferences {
 
 	public void setSubtitleLanguage(@Nullable String language) {
 		mmkv.encode(KEY_SUBTITLE_LANGUAGE, language);
+	}
+
+	@Nullable
+	public String getPreferredSubtitleLanguage() {
+		return extensionManager.getString(Constant.PREFERRED_SUBTITLE_LANGUAGE, "auto");
+	}
+
+	public void setPreferredSubtitleLanguage(@NonNull String language) {
+		extensionManager.setString(Constant.PREFERRED_SUBTITLE_LANGUAGE, language);
+	}
+
+	@NonNull
+	public String[] getPreferredSubtitleLanguages() {
+		String pref = getPreferredSubtitleLanguage();
+		if (pref == null || "auto".equals(pref)) return new String[0];
+		if ("zh".equals(pref)) {
+			// Include both Simplified and Traditional variants when "Chinese" is selected.
+			return new String[]{"zh-Hans", "zh-Hant", "zh-CN", "zh-TW", "zh-HK", "zh-SG", "zh-MO", "zh"};
+		}
+		return new String[]{pref};
 	}
 
 	public int getResizeMode() {

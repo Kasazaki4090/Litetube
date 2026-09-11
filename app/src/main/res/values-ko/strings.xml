@@ -176,4 +176,31 @@
     <string name="playlist_download_batch_segment_partial">%1$d개 부분 성공</string>
     <string name="playlist_download_batch_segment_failed">%1$d개 실패</string>
     <string name="playlist_download_started">재생목록 다운로드 시작됨</string>
+
+    <string name="preferred_subtitle_language">선호하는 자막 언어</string>
+    <string name="remember_subtitle_language">마지막으로 선택한 자막 언어 기억</string>
+    <string-array name="subtitle_languages">
+        <item>자동</item>
+        <item>중국어</item>
+        <item>영어</item>
+        <item>스페인어</item>
+        <item>프랑스어</item>
+        <item>독일어</item>
+        <item>일본어</item>
+        <item>한국어</item>
+        <item>포르투갈어</item>
+        <item>러시아어</item>
+    </string-array>
+    <string-array name="subtitle_language_codes">
+        <item>auto</item>
+        <item>zh</item>
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>pt</item>
+        <item>ru</item>
+    </string-array>
 </resources>

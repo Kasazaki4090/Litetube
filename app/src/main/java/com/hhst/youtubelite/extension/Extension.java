@@ -6,6 +6,7 @@ import static com.hhst.youtubelite.Constant.ENABLE_PIP;
 import static com.hhst.youtubelite.Constant.FULLSCREEN_ORIENTATION_LOCK;
 import static com.hhst.youtubelite.Constant.REMEMBER_LAST_POSITION;
 import static com.hhst.youtubelite.Constant.REMEMBER_RESIZE_MODE;
+import static com.hhst.youtubelite.Constant.REMEMBER_SUBTITLE_LANGUAGE;
 import static com.hhst.youtubelite.Constant.SKIP_POI_HIGHLIGHT;
 import static com.hhst.youtubelite.Constant.SKIP_SELF_PROMO;
 import static com.hhst.youtubelite.Constant.SKIP_SPONSORS;
@@ -17,7 +18,7 @@ import java.util.List;
 /**
  * Value object for app logic.
  */
-public record Extension(String key, int title, int summary, int icon, List<Extension> children) {
+public record Extension(String key, int title, int summary, int icon, int options, List<Extension> children) {
 
 	public Extension {
 		children = children == null ? List.of() : children;
@@ -34,7 +35,9 @@ public record Extension(String key, int title, int summary, int icon, List<Exten
 										toggle(Constant.REMEMBER_QUALITY, R.string.remember_quality),
 										toggle(Constant.REMEMBER_PLAYBACK_SPEED, R.string.remember_playback_speed),
 										toggle(REMEMBER_RESIZE_MODE, R.string.remember_resize_mode),
-										toggle(FULLSCREEN_ORIENTATION_LOCK, R.string.fullscreen_orientation_lock)
+										toggle(FULLSCREEN_ORIENTATION_LOCK, R.string.fullscreen_orientation_lock),
+										toggle(REMEMBER_SUBTITLE_LANGUAGE, R.string.remember_subtitle_language),
+										choice(com.hhst.youtubelite.Constant.PREFERRED_SUBTITLE_LANGUAGE, R.string.preferred_subtitle_language, R.array.subtitle_languages)
 						)),
 						page(R.string.gesture, R.string.gesture_summary, R.drawable.ic_gesture, List.of(
 										page(R.string.gesture_single_tap, 0, 0, List.of(
@@ -79,15 +82,25 @@ public record Extension(String key, int title, int summary, int icon, List<Exten
 		));
 	}
 
+	private static final int NO_OPTIONS = 0;
+
 	private static Extension page(int title, int summary, int icon, List<Extension> children) {
-		return new Extension(null, title, summary, icon, children);
+		return new Extension(null, title, summary, icon, NO_OPTIONS, children);
 	}
 
 	private static Extension toggle(String key, int title) {
-		return new Extension(key, title, 0, 0, List.of());
+		return new Extension(key, title, 0, 0, NO_OPTIONS, List.of());
+	}
+
+	private static Extension choice(String key, int title, int options) {
+		return new Extension(key, title, 0, 0, options, List.of());
 	}
 
 	public boolean hasChildren() {
 		return !children.isEmpty();
+	}
+
+	public boolean isChoice() {
+		return options != NO_OPTIONS;
 	}
 }

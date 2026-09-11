@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.extension;
 
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -40,6 +41,7 @@ import dagger.hilt.android.AndroidEntryPoint;
 public class ExtensionActivity extends AppCompatActivity {
 	private static final int TYPE_NAV = 0;
 	private static final int TYPE_TOGGLE = 1;
+	private static final int TYPE_CHOICE = 2;
 	@Inject
 	ExtensionManager manager;
 	private final Deque<Extension> stack = new ArrayDeque<>();
@@ -47,7 +49,7 @@ public class ExtensionActivity extends AppCompatActivity {
 	private Extension page;
 	private MaterialToolbar toolbar;
 
-	public static Intent intent(@NonNull android.content.Context context) {
+	public static Intent intent(@NonNull Context context) {
 		return new Intent(context, ExtensionActivity.class);
 	}
 
@@ -135,7 +137,10 @@ public class ExtensionActivity extends AppCompatActivity {
 
 		@Override
 		public int getItemViewType(int position) {
-			return items.get(position).hasChildren() ? TYPE_NAV : TYPE_TOGGLE;
+			Extension item = items.get(position);
+			if (item.hasChildren()) return TYPE_NAV;
+			if (item.isChoice()) return TYPE_CHOICE;
+			return TYPE_TOGGLE;
 		}
 
 		@Override
@@ -150,6 +155,9 @@ public class ExtensionActivity extends AppCompatActivity {
 			if (viewType == TYPE_NAV) {
 				return new NavHolder(inflater.inflate(R.layout.item_extension_nav, parent, false));
 			}
+			if (viewType == TYPE_CHOICE) {
+				return new ChoiceHolder(inflater.inflate(R.layout.item_extension_nav, parent, false));
+			}
 			return new ToggleHolder(inflater.inflate(R.layout.item_extension_toggle, parent, false));
 		}
 
@@ -158,9 +166,11 @@ public class ExtensionActivity extends AppCompatActivity {
 			Extension item = items.get(position);
 			if (holder instanceof NavHolder nav) {
 				nav.bind(item);
-				return;
+			} else if (holder instanceof ChoiceHolder choice) {
+				choice.bind(item);
+			} else if (holder instanceof ToggleHolder toggle) {
+				toggle.bind(item);
 			}
-			((ToggleHolder) holder).bind(item);
 		}
 	}
 
@@ -221,6 +231,54 @@ public class ExtensionActivity extends AppCompatActivity {
 			toggle.setChecked(manager.isEnabled(item.key()));
 			toggle.setOnCheckedChangeListener((buttonView, isChecked) -> manager.setEnabled(item.key(), isChecked));
 			itemView.setOnClickListener(v -> toggle.toggle());
+		}
+	}
+
+	private final class ChoiceHolder extends RecyclerView.ViewHolder {
+		private final TextView title;
+		private final TextView summary;
+		private final ImageView chevron;
+		private final ImageView icon;
+
+		private ChoiceHolder(@NonNull View itemView) {
+			super(itemView);
+			title = itemView.findViewById(R.id.title);
+			summary = itemView.findViewById(R.id.summary);
+			chevron = itemView.findViewById(R.id.chevron);
+			icon = itemView.findViewById(R.id.icon);
+		}
+
+		private void bind(@NonNull Extension item) {
+			title.setText(item.title());
+			String[] options = getResources().getStringArray(item.options());
+			String[] codes = getResources().getStringArray(R.array.subtitle_language_codes); // Fallback to generic codes if needed
+			String current = manager.getString(item.key(), "auto");
+
+			int checked = 0;
+			for (int i = 0; i < codes.length; i++) {
+				if (codes[i].equals(current)) {
+					checked = i;
+					break;
+				}
+			}
+
+			summary.setVisibility(View.VISIBLE);
+			summary.setText(options[checked]);
+			icon.setVisibility(View.GONE);
+			chevron.setVisibility(View.GONE);
+
+			final int finalChecked = checked;
+			itemView.setOnClickListener(v -> {
+				new MaterialAlertDialogBuilder(ExtensionActivity.this)
+								.setTitle(item.title())
+								.setSingleChoiceItems(options, finalChecked, (dialog, which) -> {
+									manager.setString(item.key(), codes[which]);
+									adapter.notifyDataSetChanged();
+									dialog.dismiss();
+								})
+								.setNegativeButton(R.string.cancel, null)
+								.show();
+			});
 		}
 	}
 }

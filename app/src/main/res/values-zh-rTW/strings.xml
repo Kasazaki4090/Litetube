@@ -194,5 +194,32 @@
     <string name="playlist_download_batch_added_before_cancel">取消前已新增 %1$d 項</string>
     <string name="playlist_download_batch_segment_partial">%1$d 個部分成功</string>
     <string name="playlist_download_batch_segment_failed">%1$d 個失敗</string>
-    <string name="playlist_download_started">播放清單下載已開始</string>
+    <string name="playlist_download_started">播放清單下載已开始</string>
+
+    <string name="preferred_subtitle_language">預設字幕语言</string>
+    <string name="remember_subtitle_language">記住上次選中的字幕语言</string>
+    <string-array name="subtitle_languages">
+        <item>自动</item>
+        <item>中文</item>
+        <item>英语</item>
+        <item>西班牙语</item>
+        <item>法语</item>
+        <item>德语</item>
+        <item>日语</item>
+        <item>韩语</item>
+        <item>葡萄牙语</item>
+        <item>俄语</item>
+    </string-array>
+    <string-array name="subtitle_language_codes">
+        <item>auto</item>
+        <item>zh</item>
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>pt</item>
+        <item>ru</item>
+    </string-array>
 </resources>

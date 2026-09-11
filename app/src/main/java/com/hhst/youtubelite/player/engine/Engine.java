@@ -342,7 +342,7 @@ public class Engine {
 		this.videoStream = selectedVideo(plan);
 		boolean enabled = this.prefs.isSubtitleEnabled();
 		setSubtitlesEnabled(enabled);
-		String saved = this.prefs.getSubtitleLanguage();
+		String saved = prefs.isRememberSubtitleLanguageEnabled() ? this.prefs.getSubtitleLanguage() : null;
 		if (enabled && saved != null && !saved.isEmpty() && !subtitles.isEmpty()) {
 			setSubtitleLanguage(saved);
 		}
@@ -731,6 +731,12 @@ public class Engine {
 				builder.clearVideoSizeConstraints();
 			}
 		}
+
+		String[] preferredSubs = prefs.getPreferredSubtitleLanguages();
+		if (preferredSubs.length > 0) {
+			builder.setPreferredTextLanguages(preferredSubs);
+		}
+
 		trackSelector.setParameters(builder.build());
 	}
 

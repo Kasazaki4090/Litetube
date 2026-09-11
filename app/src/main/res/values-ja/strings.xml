@@ -176,4 +176,31 @@
     <string name="playlist_download_batch_segment_partial">%1$d 件が一部成功</string>
     <string name="playlist_download_batch_segment_failed">%1$d 件が失敗</string>
     <string name="playlist_download_started">プレイリストのダウンロードを開始しました</string>
+
+    <string name="preferred_subtitle_language">優先する字幕言語</string>
+    <string name="remember_subtitle_language">最後に選択した字幕言語を記憶する</string>
+    <string-array name="subtitle_languages">
+        <item>自動</item>
+        <item>中国語</item>
+        <item>英語</item>
+        <item>スペイン語</item>
+        <item>フランス語</item>
+        <item>ドイツ語</item>
+        <item>日本語</item>
+        <item>韓国語</item>
+        <item>ポルトガル语</item>
+        <item>ロシア語</item>
+    </string-array>
+    <string-array name="subtitle_language_codes">
+        <item>auto</item>
+        <item>zh</item>
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>pt</item>
+        <item>ru</item>
+    </string-array>
 </resources>

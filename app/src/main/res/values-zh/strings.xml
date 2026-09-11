@@ -195,4 +195,31 @@
     <string name="playlist_download_batch_segment_partial">%1$d 个部分成功</string>
     <string name="playlist_download_batch_segment_failed">%1$d 个失败</string>
     <string name="playlist_download_started">播放列表下载已开始</string>
+
+    <string name="preferred_subtitle_language">默认字幕语言</string>
+    <string name="remember_subtitle_language">记住上次选中的字幕语言</string>
+    <string-array name="subtitle_languages">
+        <item>自动</item>
+        <item>中文</item>
+        <item>英语</item>
+        <item>西班牙语</item>
+        <item>法语</item>
+        <item>德语</item>
+        <item>日语</item>
+        <item>韩语</item>
+        <item>葡萄牙语</item>
+        <item>俄语</item>
+    </string-array>
+    <string-array name="subtitle_language_codes">
+        <item>auto</item>
+        <item>zh</item>
+        <item>en</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>pt</item>
+        <item>ru</item>
+    </string-array>
 </resources>

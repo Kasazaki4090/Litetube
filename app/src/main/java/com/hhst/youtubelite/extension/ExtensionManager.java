@@ -66,6 +66,18 @@ public class ExtensionManager {
 		return mmkv.decodeBool(prefKey(key), Boolean.TRUE.equals(Constant.DEFAULT_PREFERENCES.getOrDefault(key, false)));
 	}
 
+	public String getString(String key, String defaultValue) {
+		return mmkv.decodeString(prefKey(key), defaultValue);
+	}
+
+	public void setString(String key, String value) {
+		String pref = prefKey(key);
+		String old = mmkv.decodeString(pref, null);
+		if (value == null ? old == null : value.equals(old)) return;
+		mmkv.encode(pref, value);
+		bumpVersion();
+	}
+
 	public void resetToDefault() {
 		boolean changed = false;
 		for (Map.Entry<String, Boolean> entry : Constant.DEFAULT_PREFERENCES.entrySet()) {
