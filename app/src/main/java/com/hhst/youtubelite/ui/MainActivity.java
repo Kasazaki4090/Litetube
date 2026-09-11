@@ -118,6 +118,7 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 	private boolean bootstrapped;
 	private boolean suppressPiP;
 	private boolean wasInPiP;
+	private Boolean lastThemeWasDark;
 	@Nullable
 	private Runnable pendingPermissionAction;
 	@Nullable
@@ -291,6 +292,20 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 		// The activity is not recreated (see configChanges in the manifest); keep the
 		// player's rotation/fullscreen state in sync with the new configuration.
 		if (player != null) player.syncRotation(DeviceUtils.isRotateOn(this), newConfig.orientation);
+
+		// Synchronize WebView theme without interrupting playback.
+		YoutubeWebview webView = getWebView();
+		if (webView != null) {
+			webView.setTheme(isDark);
+			// YouTube's SPA theme engine sometimes gets stuck (especially when switching to light mode),
+			// causing grey fonts or dark comment backgrounds. Since the native player is separate,
+			// we can safely reload the WebView to force a clean re-render without stopping the video.
+			// Using a slightly longer delay to ensure CookieManager flush is processed.
+			if (lastThemeWasDark == null || lastThemeWasDark != isDark) {
+				lastThemeWasDark = isDark;
+				webView.postDelayed(webView::reload, 300);
+			}
+		}
 	}
 
 	private void handleIntent(@Nullable Intent intent) {

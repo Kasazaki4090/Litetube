@@ -5,8 +5,10 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Looper;
 import android.os.Message;
 import android.util.AttributeSet;
@@ -433,6 +435,11 @@ public class YoutubeWebview extends WebView {
 
 				injectJavaScript(url);
 				refreshPoTokenContext();
+
+				// Synchronize theme state when page load finishes.
+				boolean isDark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+				setTheme(isDark);
+
 				if (onPageFinishedListener != null) onPageFinishedListener.accept(url);
 			}
 
@@ -638,6 +645,116 @@ public class YoutubeWebview extends WebView {
 				}
 			}
 		});
+
+		// Initial theme synchronization.
+		boolean isDark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+		setTheme(isDark);
+	}
+
+	/**
+	 * Sets the theme of the WebView (dark/light mode).
+	 *
+	 * @param isDark True for dark mode, false for light mode.
+	 */
+	public void setTheme(boolean isDark) {
+		if (!initialized) return;
+
+		// 1. Configure WebView to signal preferred color scheme to CSS media queries.
+		WebSettings settings = getSettings();
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+			settings.setAlgorithmicDarkeningAllowed(isDark);
+		} else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+			settings.setForceDark(isDark ? WebSettings.FORCE_DARK_ON : WebSettings.FORCE_DARK_OFF);
+		}
+
+		// 2. Set Cookie via Java for better persistence during reloads.
+		// f6=400 is dark mode, f6=10000 or f6=0 is light mode.
+		CookieManager cookieManager = CookieManager.getInstance();
+		String currentCookies = cookieManager.getCookie("https://www.youtube.com");
+		String prefValue = "f6=" + (isDark ? "400" : "10000");
+
+		if (currentCookies != null && currentCookies.contains("PREF=")) {
+			// Basic string manipulation to avoid regex lambda issues
+			int start = currentCookies.indexOf("PREF=");
+			int end = currentCookies.indexOf(";", start);
+			if (end == -1) end = currentCookies.length();
+			String prefPart = currentCookies.substring(start, end);
+			String newPrefPart;
+			if (prefPart.contains("f6=")) {
+				newPrefPart = prefPart.replaceAll("f6=[^&]+", prefValue);
+			} else {
+				newPrefPart = prefPart + (prefPart.endsWith("=") ? "" : "&") + prefValue;
+			}
+			cookieManager.setCookie("https://www.youtube.com", newPrefPart + "; domain=.youtube.com; path=/");
+		} else {
+			cookieManager.setCookie("https://www.youtube.com", "PREF=" + prefValue + "; domain=.youtube.com; path=/");
+		}
+		cookieManager.flush();
+
+		// 3. Inject JS for immediate UI transition.
+		String script = String.format(
+						"(function(dark) {" +
+										"  const val = dark ? 'true' : 'false';" +
+										"  const doc = document.documentElement;" +
+										"  " +
+										"  // Force attributes on html and body" +
+										"  doc.setAttribute('dark', val);" +
+										"  if (dark) doc.classList.add('dark');" +
+										"  else doc.classList.remove('dark');" +
+										"  document.body.setAttribute('dark', val);" +
+										"  " +
+										"  // Clear element-level dark attributes/classes that might be stuck" +
+										"  document.querySelectorAll('[dark]').forEach(el => el.setAttribute('dark', val));" +
+										"  if (!dark) {" +
+										"    document.querySelectorAll('.dark').forEach(el => el.classList.remove('dark'));" +
+										"    doc.style.backgroundColor = '#ffffff';" +
+										"    document.body.style.backgroundColor = '#ffffff';" +
+										"  } else {" +
+										"    doc.style.backgroundColor = '#0f0f0f';" +
+										"    document.body.style.backgroundColor = '#0f0f0f';" +
+										"  }" +
+										"  " +
+										"  // Fix LocalStorage if present" +
+										"  try {" +
+										"    const data = JSON.parse(localStorage.getItem('yt-player-sticky-settings') || '{}');" +
+										"    if (data.values) {" +
+										"      data.values.dark = dark;" +
+										"      localStorage.setItem('yt-player-sticky-settings', JSON.stringify(data));" +
+										"    }" +
+										"  } catch(e) {}" +
+										"  " +
+										"  // Force update spec variables to fix 'grey font' and 'black comments'" +
+										"  const styles = dark ? {" +
+										"    '--yt-spec-text-primary': '#ffffff'," +
+										"    '--yt-spec-text-secondary': '#aaaaaa'," +
+										"    '--yt-spec-general-background-a': '#0f0f0f'," +
+										"    '--yt-spec-brand-background-solid': '#0f0f0f'," +
+										"    '--yt-spec-raised-background': '#212121'," +
+										"    '--yt-spec-static-brand-white': '#ffffff'" +
+										"  } : {" +
+										"    '--yt-spec-text-primary': '#030303'," +
+										"    '--yt-spec-text-secondary': '#606060'," +
+										"    '--yt-spec-general-background-a': '#ffffff'," +
+										"    '--yt-spec-brand-background-solid': '#ffffff'," +
+										"    '--yt-spec-raised-background': '#f9f9f9'," +
+										"    '--yt-spec-static-brand-white': '#ffffff'" +
+										"  };" +
+										"  for (const [prop, value] of Object.entries(styles)) {" +
+										"    doc.style.setProperty(prop, value, 'important');" +
+										"    document.body.style.setProperty(prop, value, 'important');" +
+										"  }" +
+										"  " +
+										"  // Update custom LiteTube components" +
+										"  const chatBox = document.getElementById('live_chat_container');" +
+										"  if (chatBox) chatBox.style.backgroundColor = dark ? '#0f0f0f' : '#ffffff';" +
+										"  " +
+										"  // Signal internal YT app components" +
+										"  const ytmApp = document.querySelector('ytm-app');" +
+										"  if (ytmApp && typeof ytmApp.setTheme === 'function') ytmApp.setTheme(dark ? 'DARK' : 'LIGHT');" +
+										"  " +
+										"  window.dispatchEvent(new Event('resize'));" +
+										"})(%b);", isDark);
+		evaluateJavascript(script, null);
 	}
 
 	/**
