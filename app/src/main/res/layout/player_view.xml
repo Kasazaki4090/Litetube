@@ -44,6 +44,7 @@
             android:background="@drawable/gradient_bottom" />
 
         <LinearLayout
+            android:id="@+id/controls_content_layout"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical">
@@ -201,9 +202,11 @@
                 </FrameLayout>
 
                 <LinearLayout
+                    android:id="@+id/bottom_buttons_container"
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
+                    android:layout_height="wrap_content"
                     android:gravity="center_vertical"
+                    android:minHeight="36dp"
                     android:orientation="horizontal"
                     android:paddingHorizontal="12dp">
 

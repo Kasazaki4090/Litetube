@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
@@ -132,7 +133,7 @@ public class TabManager {
 		} else {
 			YoutubeFragment home = null;
 			YoutubeFragment nav = null;
-			java.util.List<YoutubeFragment> hiddenNavTabs = new java.util.ArrayList<>();
+			List<YoutubeFragment> hiddenNavTabs = new ArrayList<>();
 			for (var t : tabs) {
 				var tabTag = t.getTabTag();
 				if (homeTag.equals(tabTag)) home = t;
@@ -221,6 +222,18 @@ public class TabManager {
 			return;
 		}
 		openTab(url, UrlUtils.getPageClass(url));
+	}
+
+	public void onProgressUpdate(long positionMs) {
+		evalWatchJs(String.format(Locale.US,
+						"(function(){" +
+										"  const p = document.querySelector('#movie_player');" +
+										"  if (p && typeof p.seekTo === 'function') {" +
+										"    const current = p.getCurrentTime();" +
+										"    const target = %f;" +
+										"    if (Math.abs(current - target) > 3) p.seekTo(target);" +
+										"  }" +
+										"})();", positionMs / 1000.0), null);
 	}
 
 	public boolean canGoBackInWatch() {

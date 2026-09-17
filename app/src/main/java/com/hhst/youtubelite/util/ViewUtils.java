@@ -3,6 +3,7 @@ package com.hhst.youtubelite.util;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
+import android.os.Build;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -80,6 +81,11 @@ public final class ViewUtils {
 		WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
 						window, window.getDecorView());
 		if (fullscreen) {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+				WindowManager.LayoutParams params = window.getAttributes();
+				params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+				window.setAttributes(params);
+			}
 			controller.hide(WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.navigationBars());
 			controller.setSystemBarsBehavior(
 							WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);

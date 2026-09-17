@@ -107,6 +107,10 @@ public class Engine {
 					prefs.persistProgress(videoId, pos, duration, TimeUnit.MILLISECONDS);
 				}
 			}
+			// Sync progress to web player.
+			if (videoId != null) {
+				tabManager.onProgressUpdate(pos);
+			}
 			// Skip sponsor segments.
 			List<long[]> segments = sponsor.getSegments();
 			for (final long[] segment : segments) {

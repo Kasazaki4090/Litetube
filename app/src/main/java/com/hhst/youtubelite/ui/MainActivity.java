@@ -489,13 +489,20 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 							recyclerBasePaddingBottom + Math.max(Math.max(0, bottomInset), Math.max(0, recyclerTrailingSpace)));
 			View playerRoot = findViewById(R.id.playerView);
 			int mainHeight = mainView != null ? mainView.getHeight() : 0;
-			int topInset = mainView != null ? mainView.getPaddingTop() : 0;
+			int topInset = rootInsets != null
+							? rootInsets.getInsets(WindowInsetsCompat.Type.systemBars()).top
+							: 0;
 			int playerBottom = playerRoot != null ? playerRoot.getBottom() : 0;
 			final int maxSheetHeight;
 			if (mainHeight <= 0) {
 				maxSheetHeight = 0;
 			} else if (uiState().miniPlayer()) {
 				maxSheetHeight = Math.max(0, mainHeight - Math.max(0, topInset));
+			} else if (player != null && player.isFullscreen()) {
+				// Prevent reaching the top in fullscreen to maintain consistent rounded corners
+				// and avoid interference with system bars.
+				int topGap = Math.max(topInset, ViewUtils.dpToPx(MainActivity.this, 32));
+				maxSheetHeight = mainHeight - topGap;
 			} else if (playerBottom <= 0 || playerBottom >= mainHeight) {
 				maxSheetHeight = mainHeight;
 			} else {
@@ -512,6 +519,9 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 				sheetView.setLayoutParams(sheetLayoutParams);
 			}
 			behavior.setPeekHeight(maxSheetHeight > 0 ? maxSheetHeight : sheetView.getMeasuredHeight());
+			// Keep rounded corners even when "expanded" by preventing it from reaching the true top
+			// and disabling the default M3 corner removal behavior.
+			behavior.setShouldRemoveExpandedCorners(false);
 			behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
 			sheet.scrollPending = true;
 			renderQueueSheet(uiState());

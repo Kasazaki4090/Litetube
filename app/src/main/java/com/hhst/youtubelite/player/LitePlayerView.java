@@ -8,6 +8,7 @@ import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Outline;
 import android.graphics.Rect;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.util.Rational;
 import android.view.MotionEvent;
@@ -146,7 +147,7 @@ public class LitePlayerView extends PlayerView {
 		setOutlineProvider(new ViewOutlineProvider() {
 			@Override
 			public void getOutline(View view, Outline outline) {
-				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dpToPx(16));
+				outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), ViewUtils.dpToPx(activity, 16));
 			}
 		});
 		setClipToOutline(false);
@@ -164,6 +165,41 @@ public class LitePlayerView extends PlayerView {
 				playerHeight = bottom - top;
 			}
 			if (inAppMiniPlayer) invalidateOutline();
+		});
+
+		ViewCompat.setOnApplyWindowInsetsListener(this, (v, insets) -> {
+			if (isFs) {
+				Insets cutout = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout());
+				Insets bars = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars());
+				int left = Math.max(cutout.left, bars.left);
+				int top = Math.max(cutout.top, bars.top);
+				int right = Math.max(cutout.right, bars.right);
+				int bottom = Math.max(cutout.bottom, bars.bottom);
+
+				int minSidePadding = ViewUtils.dpToPx(activity, 20);
+				left = Math.max(left, minSidePadding);
+				right = Math.max(right, minSidePadding);
+
+				// Pad the internal layout to push buttons into the safe zone while keeping gradients full-screen
+				View controlsContent = findViewById(R.id.controls_content_layout);
+				if (controlsContent != null) {
+					controlsContent.setPadding(left, top, right, bottom);
+				}
+				View centerControls = findViewById(R.id.center_controls);
+				if (centerControls != null) {
+					centerControls.setPadding(left, 0, right, 0);
+				}
+			} else {
+				View controlsContent = findViewById(R.id.controls_content_layout);
+				if (controlsContent != null) {
+					controlsContent.setPadding(0, 0, 0, 0);
+				}
+				View centerControls = findViewById(R.id.center_controls);
+				if (centerControls != null) {
+					centerControls.setPadding(0, 0, 0, 0);
+				}
+			}
+			return insets;
 		});
 	}
 
@@ -226,12 +262,12 @@ public class LitePlayerView extends PlayerView {
 	}
 
 	public void disableAutoPiP() {
-		if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return;
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
 		activity.setPictureInPictureParams(buildPiPParams(false));
 	}
 
 	public void enableAutoPiP() {
-		if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return;
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
 		activity.setPictureInPictureParams(buildPiPParams(true));
 	}
 
@@ -776,7 +812,7 @@ public class LitePlayerView extends PlayerView {
 	private PictureInPictureParams buildPiPParams(boolean autoEnter) {
 		PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder()
 						.setAspectRatio(new Rational(16, 9));
-		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 			builder.setAutoEnterEnabled(autoEnter);
 		}
 		Rect sourceRectHint = new Rect();
@@ -798,6 +834,7 @@ public class LitePlayerView extends PlayerView {
 		updatePlayerLayout(false);
 		setResizeMode(inAppMiniPlayer ? AspectRatioFrameLayout.RESIZE_MODE_FIT : defaultResizeMode);
 		updateMiniPlayerCornerClipping();
+		ViewCompat.requestApplyInsets(this);
 		updateFullscreenButton(false);
 	}
 
@@ -814,6 +851,7 @@ public class LitePlayerView extends PlayerView {
 		updatePlayerLayout(true);
 		setResizeMode(defaultResizeMode);
 		updateMiniPlayerCornerClipping();
+		ViewCompat.requestApplyInsets(this);
 		updateFullscreenButton(true);
 	}
 
