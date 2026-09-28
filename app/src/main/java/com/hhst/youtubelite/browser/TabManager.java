@@ -228,10 +228,22 @@ public class TabManager {
 		evalWatchJs(String.format(Locale.US,
 						"(function(){" +
 										"  const p = document.querySelector('#movie_player');" +
-										"  if (p && typeof p.seekTo === 'function') {" +
-										"    const current = p.getCurrentTime();" +
-										"    const target = %f;" +
-										"    if (Math.abs(current - target) > 3) p.seekTo(target);" +
+										"  if (!p || typeof p.seekTo !== 'function') return;" +
+										"  if (window.__liteSyncing) return;" +
+										"  const vid = p.getVideoData()?.video_id;" +
+										"  if (!vid) return;" +
+										"  const target = %f;" +
+										"  const current = p.getCurrentTime();" +
+										"  const duration = p.getDuration();" +
+										"  const isEnd = duration > 0 && Math.abs(duration - target) < 2;" +
+										"  if (Math.abs(current - target) > 2 || isEnd) {" +
+										"    const sessionKey = '__lite_end_sync_' + vid;" +
+										"    if (isEnd && sessionStorage.getItem(sessionKey) === 'true') return;" +
+										"    window.__liteSyncing = true;" +
+										"    p.seekTo(target, true);" +
+										"    p.playVideo();" +
+										"    if (isEnd) sessionStorage.setItem(sessionKey, 'true');" +
+										"    setTimeout(() => { p.pauseVideo(); window.__liteSyncing = false; }, isEnd ? 500 : 300);" +
 										"  }" +
 										"})();", positionMs / 1000.0), null);
 	}

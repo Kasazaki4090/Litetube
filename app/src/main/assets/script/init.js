@@ -885,7 +885,7 @@
                         player.mute?.();
                         player.seekTo?.(lite.getResumePosition(Page.videoId(location.href)));
                         DOM.bind(player, 'onStateChange', (state) => {
-                            if (state === 1) player.pauseVideo?.();
+                            if (state === 1 && !window.__liteSyncing) player.pauseVideo?.();
                         });
                     } else if (ctx.isShorts) {
                         player.unMute?.();

@@ -171,6 +171,10 @@ public class Engine {
 			@Override
 			public void onPlaybackStateChanged(int state) {
 				if (state == Player.STATE_ENDED) {
+					if (videoId != null) {
+						prefs.clearProgress(videoId);
+						tabManager.onProgressUpdate(player.getDuration());
+					}
 					if (isShortVideo()) {
 						player.seekTo(0);
 						player.play();
@@ -183,13 +187,24 @@ public class Engine {
 					if (loopMode.selectsRandomPlaylistItemOnEnded()) {
 						playRandomPlaylistItem();
 					}
+				} else if (state == Player.STATE_READY && !player.getPlayWhenReady()) {
+					if (videoId != null) {
+						tabManager.onProgressUpdate(player.getCurrentPosition());
+					}
 				}
 			}
 
 			@Override
 			public void onIsPlayingChanged(boolean isPlaying) {
 				handler.removeCallbacks(onTimeUpdate);
-				if (isPlaying) handler.post(onTimeUpdate);
+				if (isPlaying) {
+					handler.post(onTimeUpdate);
+				} else {
+					// Immediate sync on pause
+					if (videoId != null) {
+						tabManager.onProgressUpdate(player.getCurrentPosition());
+					}
+				}
 			}
 
 			@Override
@@ -267,12 +282,13 @@ public class Engine {
 		boolean nextNavigation = playlistOffset > 0;
 		return """
 						(function(){
+						const getItem = item => item?.playlistPanelVideoRenderer || item?.playlistVideoRenderer;
 						const playlistContents=globalThis.ytInitialData?.contents?.singleColumnWatchNextResults?.playlist?.playlist?.contents;
 						if(!Array.isArray(playlistContents) || playlistContents.length===0) return 'missing-playlist';
 						const watchUrl=new URL(location.href);
 						const videoId=watchUrl.searchParams.get('v') ?? globalThis.ytInitialPlayerResponse?.videoDetails?.videoId;
 						if(!videoId) return 'missing-current-video-id';
-						const index=playlistContents.findIndex(item => item?.playlistPanelVideoRenderer?.videoId === videoId);
+						const index=playlistContents.findIndex(item => getItem(item)?.videoId === videoId);
 						if(index < 0) return 'missing-current-video';
 						let targetIndex;
 						if (__NEXT_NAVIGATION__) {
@@ -281,7 +297,7 @@ public class Engine {
 							if (index === 0) return 'playlist-head';
 							targetIndex = index - 1;
 						}
-						const targetVideo=playlistContents[targetIndex]?.playlistPanelVideoRenderer;
+						const targetVideo=getItem(playlistContents[targetIndex]);
 						const targetUrl=targetVideo?.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url;
 						if(typeof targetUrl !== 'string' || targetUrl.length === 0) return 'missing-target-url';
 						location.href = new URL(targetUrl, location.origin).toString();
@@ -293,19 +309,20 @@ public class Engine {
 	static String buildRandomPlaylistNavigationScript() {
 		return """
 						(function(){
+						const getItem = item => item?.playlistPanelVideoRenderer || item?.playlistVideoRenderer;
 						const playlistContents=globalThis.ytInitialData?.contents?.singleColumnWatchNextResults?.playlist?.playlist?.contents;
 						if(!Array.isArray(playlistContents) || playlistContents.length===0) return 'missing-playlist';
 						const watchUrl=new URL(location.href);
 						const videoId=watchUrl.searchParams.get('v') ?? globalThis.ytInitialPlayerResponse?.videoDetails?.videoId;
 						if(!videoId) return 'missing-current-video-id';
-						const i=playlistContents.findIndex(item => item?.playlistPanelVideoRenderer?.videoId === videoId);
+						const i=playlistContents.findIndex(item => getItem(item)?.videoId === videoId);
 						if(i < 0) return 'missing-current-video';
 						const candidateIndices=playlistContents
-							.map((item,index)=>item?.playlistPanelVideoRenderer ? index : -1)
+							.map((item,index)=>getItem(item) ? index : -1)
 							.filter(index=>index >= 0 && (playlistContents.length === 1 || index !== i));
 						if(candidateIndices.length === 0) return 'missing-random-target';
 						const targetIndex=candidateIndices[Math.floor(Math.random() * candidateIndices.length)];
-						const targetVideo=playlistContents[targetIndex]?.playlistPanelVideoRenderer;
+						const targetVideo=getItem(playlistContents[targetIndex]);
 						const targetUrl=targetVideo?.navigationEndpoint?.commandMetadata?.webCommandMetadata?.url;
 						if(typeof targetUrl !== 'string' || targetUrl.length === 0) return 'missing-target-url';
 						location.href = new URL(targetUrl, location.origin).toString();

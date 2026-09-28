@@ -191,6 +191,12 @@ public final class PlayerPreferences {
 		return progress.position;
 	}
 
+	public void clearProgress(@Nullable String videoId) {
+		if (videoId == null) return;
+		String key = PREFIX_PROGRESS + videoId;
+		mmkv.removeValueForKey(key);
+	}
+
 	public void persistProgress(@Nullable String videoId, long position, long duration, TimeUnit unit) {
 		boolean enabled = extensionManager.isEnabled(Constant.REMEMBER_LAST_POSITION);
 		if (!enabled || videoId == null) return;

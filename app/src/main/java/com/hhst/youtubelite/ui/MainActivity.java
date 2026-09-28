@@ -466,6 +466,7 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 			if (bottomSheet == null) return;
 			BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
 			sheet.behavior = behavior;
+			behavior.setExpandedOffset(ViewUtils.dpToPx(this, 4));
 			int sheetBasePaddingBottom = sheetView.getPaddingBottom();
 			int recyclerBasePaddingBottom = recyclerView.getPaddingBottom();
 			int recyclerTrailingSpace = Math.round(getResources().getDisplayMetrics().density * 24);
