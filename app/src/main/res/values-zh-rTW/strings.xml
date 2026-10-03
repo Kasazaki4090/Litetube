@@ -20,7 +20,7 @@
     <string name="extension">擴充功能</string>
     <string name="request_restart">重啟以應用更改</string>
     <string name="restart">重啟</string>
-    <string name="display_dislikes">顯示點踩數</string>
+    <string name="display_dislikes">顯示點讚點踩數</string>
     <string name="hide_shorts">隱藏 Shorts</string>
     <string name="action_pause">暫停</string>
     <string name="action_play">播放</string>

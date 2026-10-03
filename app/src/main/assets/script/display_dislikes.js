@@ -87,6 +87,28 @@
     }
   }
 
+  function getLikeTextContainer() {
+    const likeButton = getLikeButton();
+    if (!likeButton) return null;
+
+    const existing =
+      likeButton.querySelector(".button-renderer-text") ??
+      likeButton.querySelector("#text") ??
+      likeButton.getElementsByTagName("yt-formatted-string")[0] ??
+      likeButton.querySelector("span[role='text']");
+    if (existing) return existing;
+
+    const button = likeButton.querySelector("button");
+    if (!button) return null;
+
+    const textSpan = document.createElement("span");
+    textSpan.id = "text";
+    textSpan.style.marginLeft = "6px";
+    button.appendChild(textSpan);
+    button.style.width = "auto";
+    return textSpan;
+  }
+
   function getDislikeTextContainer() {
     const dislikeButton = getDislikeButton();
     if (!dislikeButton) return null;
@@ -110,9 +132,13 @@
   }
 
   function clearDislikeCount() {
-    const container = getDislikeTextContainer();
-    if (container) {
-      container.textContent = "";
+    const dislikeContainer = getDislikeTextContainer();
+    if (dislikeContainer) {
+      dislikeContainer.textContent = "";
+    }
+    const likeContainer = getLikeTextContainer();
+    if (likeContainer) {
+      likeContainer.textContent = "";
     }
   }
 
@@ -166,11 +192,19 @@
 
   function applyDislikeCount() {
     if (!enabled) return;
-    const container = getDislikeTextContainer();
-    if (!container) return;
-    const nextText = formatCount(dislikesValue);
-    if (container.textContent !== nextText) {
-      container.textContent = nextText;
+    const dislikeContainer = getDislikeTextContainer();
+    if (dislikeContainer) {
+      const nextText = formatCount(dislikesValue);
+      if (dislikeContainer.textContent !== nextText) {
+        dislikeContainer.textContent = nextText;
+      }
+    }
+    const likeContainer = getLikeTextContainer();
+    if (likeContainer && likesValue > 0) {
+      const nextText = formatCount(likesValue);
+      if (likeContainer.textContent !== nextText) {
+        likeContainer.textContent = nextText;
+      }
     }
   }
 

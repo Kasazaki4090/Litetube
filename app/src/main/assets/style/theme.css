@@ -33,3 +33,42 @@ header-bar ytm-mobile-topbar-renderer#header-bar header.mobile-topbar-header.cbo
     color: inherit !important;
     border-color: inherit !important;
 }
+
+/* Hide unwatched count badge next to channel avatar */
+.channel-item-badge,
+.ytm-channel-item-renderer-badge,
+ytm-channel-item-renderer .badge,
+ytm-compact-channel-renderer .badge,
+.subscription-item-badge,
+[class*="channel-item-badge"],
+[class*="subscription-badge"],
+ytm-badge-and-byline-renderer .badge {
+    display: none !important;
+}
+
+/* Always display Subscribe / Unsubscribe button for channel items */
+ytm-channel-item-renderer ytm-subscribe-button-renderer,
+ytm-compact-channel-renderer ytm-subscribe-button-renderer,
+ytm-channel-item-renderer .subscribe-button,
+ytm-compact-channel-renderer .subscribe-button {
+    display: inline-flex !important;
+}
+
+/* Watch page (classic + slim owner): hide the subscriber-count number/badge next to the avatar */
+ytm-video-owner-renderer .owner-subscriber-count,
+ytm-video-owner-renderer [class*="subscriber-count"],
+ytm-video-owner-renderer [class*="owner-subscriber"],
+ytm-slim-owner-renderer [class*="subscriber"],
+ytm-slim-owner-renderer .owner-sub-count,
+#owner-sub-count {
+    display: none !important;
+}
+
+/* Watch page (classic + slim owner): force show the native subscribe button if present */
+ytm-video-owner-renderer ytm-subscribe-button-renderer,
+ytm-video-owner-renderer [class*="subscribe-button"],
+ytm-video-owner-renderer .video-owner-subscriber-container,
+ytm-slim-owner-renderer ytm-subscribe-button-renderer,
+ytm-slim-owner-renderer [class*="subscribe"] {
+    display: inline-flex !important;
+}

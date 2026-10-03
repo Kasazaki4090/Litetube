@@ -447,6 +447,7 @@
                 lite.setRefreshLayoutEnabled(ctx.isHomeLike);
                 const results = [
                     OpenApp.run(),
+                    ChannelSubscriptions.run(),
                     Search.run(ctx),
                     Player.run(ctx),
                     Gesture.run(ctx),
@@ -455,6 +456,19 @@
                     Settings.run(ctx)
                 ];
                 return !results.some(result => result === false);
+            }
+        };
+
+        const ChannelSubscriptions = {
+            run() {
+                document.querySelectorAll('.channel-item-badge, .ytm-channel-item-renderer-badge, ytm-channel-item-renderer .badge, ytm-compact-channel-renderer .badge, .subscription-item-badge, [class*="channel-item-badge"], [class*="subscription-badge"]').forEach(el => {
+                    if (el instanceof HTMLElement) el.style.display = 'none';
+                });
+                document.querySelectorAll('ytm-channel-item-renderer ytm-subscribe-button-renderer, ytm-compact-channel-renderer ytm-subscribe-button-renderer').forEach(btn => {
+                    if (btn instanceof HTMLElement && btn.style.display === 'none') {
+                        btn.style.removeProperty('display');
+                    }
+                });
             }
         };
 

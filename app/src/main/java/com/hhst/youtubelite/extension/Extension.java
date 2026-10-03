@@ -3,7 +3,6 @@ package com.hhst.youtubelite.extension;
 import static com.hhst.youtubelite.Constant.ENABLE_BACKGROUND_PLAY;
 import static com.hhst.youtubelite.Constant.ENABLE_IN_APP_MINI_PLAYER;
 import static com.hhst.youtubelite.Constant.ENABLE_PIP;
-import static com.hhst.youtubelite.Constant.FULLSCREEN_ORIENTATION_LOCK;
 import static com.hhst.youtubelite.Constant.REMEMBER_LAST_POSITION;
 import static com.hhst.youtubelite.Constant.REMEMBER_RESIZE_MODE;
 import static com.hhst.youtubelite.Constant.REMEMBER_SUBTITLE_LANGUAGE;
@@ -35,7 +34,6 @@ public record Extension(String key, int title, int summary, int icon, int option
 										toggle(Constant.REMEMBER_QUALITY, R.string.remember_quality),
 										toggle(Constant.REMEMBER_PLAYBACK_SPEED, R.string.remember_playback_speed),
 										toggle(REMEMBER_RESIZE_MODE, R.string.remember_resize_mode),
-										toggle(FULLSCREEN_ORIENTATION_LOCK, R.string.fullscreen_orientation_lock),
 										toggle(REMEMBER_SUBTITLE_LANGUAGE, R.string.remember_subtitle_language),
 										choice(com.hhst.youtubelite.Constant.PREFERRED_SUBTITLE_LANGUAGE, R.string.preferred_subtitle_language, R.array.subtitle_languages)
 						)),

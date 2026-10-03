@@ -20,6 +20,7 @@ import com.hhst.youtubelite.extractor.YoutubeExtractor;
 import com.hhst.youtubelite.extractor.potoken.PoTokenContextStore;
 import com.hhst.youtubelite.player.LitePlayer;
 import com.hhst.youtubelite.player.queue.QueueRepository;
+import com.hhst.youtubelite.util.UrlUtils;
 
 import java.util.Objects;
 
@@ -133,6 +134,10 @@ public final class YoutubeFragment extends Fragment {
 		return view;
 	}
 
+	private boolean isWatchFragment() {
+		return Constant.PAGE_WATCH.equals(tag) || Constant.PAGE_WATCH.equals(UrlUtils.getPageClass(url));
+	}
+
 	@Override
 	public void onResume() {
 		super.onResume();
@@ -141,7 +146,6 @@ public final class YoutubeFragment extends Fragment {
 		webView.setScriptActive(true);
 		webView.syncPreferences();
 		webView.onResume();
-		webView.resumeTimers();
 		webView.refreshPoTokenContext();
 	}
 
@@ -150,13 +154,12 @@ public final class YoutubeFragment extends Fragment {
 		super.onPause();
 		YoutubeWebview webView = this.webView;
 		if (webView == null || isHidden()) return;
-		if (Constant.PAGE_WATCH.equals(tag)) {
+		if (isWatchFragment()) {
 			return;
 		}
 		if (getActivity() != null && getActivity().isInPictureInPictureMode()) return;
 		webView.setScriptActive(false);
 		webView.onPause();
-		webView.pauseTimers();
 	}
 
 	@Override
@@ -165,17 +168,15 @@ public final class YoutubeFragment extends Fragment {
 		YoutubeWebview webView = this.webView;
 		if (webView == null) return;
 		if (hidden) {
-			if (Constant.PAGE_WATCH.equals(tag)) {
+			if (isWatchFragment()) {
 				return;
 			}
 			webView.setScriptActive(false);
 			webView.onPause();
-			webView.pauseTimers();
 		} else {
 			webView.setScriptActive(true);
 			webView.syncPreferences();
 			webView.onResume();
-			webView.resumeTimers();
 			webView.refreshPoTokenContext();
 		}
 	}

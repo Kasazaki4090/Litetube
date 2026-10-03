@@ -75,7 +75,7 @@ public class TabManager {
 	}
 
 	public void onUrlChanged(@NonNull YoutubeFragment fragment, @NonNull String url) {
-		if (fragment != tab) return;
+		if (fragment != tab && fragment != suspendedTab) return;
 		LitePlayer litePlayer = litePlayer();
 		if (Constant.PAGE_WATCH.equals(UrlUtils.getPageClass(url))) {
 			if (litePlayer.isInMiniPlayer()) litePlayer.exitInAppMiniPlayer();
@@ -84,6 +84,19 @@ public class TabManager {
 		}
 		if (suspendedTab != null || litePlayer.isInMiniPlayer()) return;
 		litePlayer.hide();
+	}
+
+	public void refreshActiveTab() {
+		YoutubeFragment currentTab = this.tab;
+		if (currentTab != null && currentTab.getWebView() != null) {
+			currentTab.getWebView().evaluateJavascript(
+							"(function(){" +
+											"  window.dispatchEvent(new Event('doUpdateVisitedHistory'));" +
+											"  if (location && location.href && !location.href.includes('watch')) {" +
+											"    location.reload();" +
+											"  }" +
+											"})();", null);
+		}
 	}
 
 	private void onTabChanged() {

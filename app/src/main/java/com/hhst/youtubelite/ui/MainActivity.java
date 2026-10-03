@@ -690,6 +690,12 @@ public final class MainActivity extends AppCompatActivity implements LifecycleEv
 	protected void onResume() {
 		super.onResume();
 		suppressPiP = false;
+		if (wasInPiP && !DeviceUtils.isInPictureInPictureMode(this)) {
+			wasInPiP = false;
+			if (tabManager != null) {
+				tabManager.refreshActiveTab();
+			}
+		}
 		if (player != null && player.isInMiniPlayer() && !DeviceUtils.isInPictureInPictureMode(this)) {
 			player.restoreInAppMiniPlayerUiIfNeeded();
 		}

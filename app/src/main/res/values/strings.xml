@@ -36,7 +36,7 @@
     <string name="extension">Extensions</string>
     <string name="request_restart">Restart to apply changes</string>
     <string name="restart">Restart</string>
-    <string name="display_dislikes">Show dislikes</string>
+    <string name="display_dislikes">Show likes and dislikes</string>
     <string name="hide_shorts">Hide Shorts</string>
     <string name="action_pause">Pause</string>
     <string name="action_play">Play</string>
@@ -45,7 +45,7 @@
     <string name="action_next">Skip to next</string>
     <string name="general">Appearance</string>
     <string name="interface_category">Interface</string>
-    <string name="interface_summary">Show dislikes, hide Shorts</string>
+    <string name="interface_summary">Show likes and dislikes, hide Shorts</string>
     <string name="player">Playback</string>
     <string name="playback_summary">Position, quality, speed, resize mode</string>
     <string name="gesture">Gesture</string>
@@ -100,7 +100,6 @@
     <string name="jumped_to_segment">Jumped to: %1$s</string>
     <string name="jump">Jump</string>
     <string name="remember_resize_mode">Remember resize mode</string>
-    <string name="fullscreen_orientation_lock">Lock orientation in fullscreen</string>
     <string name="in_app_mini_player">In-app mini-player</string>
     <string name="bitrate">Bitrate</string>
     <string name="dropped_frames">Dropped Frames</string>

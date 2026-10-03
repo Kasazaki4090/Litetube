@@ -34,7 +34,7 @@
     <string name="extension">扩展</string>
     <string name="request_restart">重启以应用更改</string>
     <string name="restart">重启</string>
-    <string name="display_dislikes">显示点踩数</string>
+    <string name="display_dislikes">显示点赞点踩数</string>
     <string name="hide_shorts">隐藏 Shorts</string>
     <string name="action_pause">暂停</string>
     <string name="action_play">播放</string>
@@ -43,7 +43,7 @@
     <string name="action_next">下一个</string>
     <string name="general">外观</string>
     <string name="interface_category">界面</string>
-    <string name="interface_summary">显示点踩数，隐藏 Shorts</string>
+    <string name="interface_summary">显示点赞点踩数，隐藏 Shorts</string>
     <string name="player">播放</string>
     <string name="playback_summary">进度、画质、倍速、缩放模式</string>
     <string name="gesture">手势</string>

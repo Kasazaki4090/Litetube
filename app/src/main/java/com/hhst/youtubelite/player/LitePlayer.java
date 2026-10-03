@@ -565,8 +565,10 @@ public class LitePlayer {
 				playerView.disableAutoPiP();
 			}
 		}
-		if (wasInPip && !isInPiP && inMiniPlayer && onRestore != null) {
-			onRestore.run();
+		if (wasInPip && !isInPiP) {
+			if (inMiniPlayer && onRestore != null) {
+				onRestore.run();
+			}
 		}
 		wasInPip = isInPiP;
 	}
