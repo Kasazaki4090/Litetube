@@ -116,3 +116,4 @@ flowchart LR
 >    上游为了避免 WebView 在后台空闲时定时器空转耗电，增加了 `AndroidWebViewTimerClock`。在接入我们自定义的 watch 注入脚本时，必须保持与这个休眠时钟协同，不能破坏后台暂停机制。
 > 3. **Room 数据库版本兼容**:
 >    如果本地用户原本在旧版中有历史记录或下载记录，需要注意旧版的 MMKV / SQLite 存储迁移到 Room 数据库的数据结构兼容。
+
