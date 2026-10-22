@@ -77,13 +77,17 @@ public class TabManager {
 	public void onUrlChanged(@NonNull YoutubeFragment fragment, @NonNull String url) {
 		if (fragment != tab && fragment != suspendedTab) return;
 		LitePlayer litePlayer = litePlayer();
-		if (Constant.PAGE_WATCH.equals(UrlUtils.getPageClass(url))) {
-			if (litePlayer.isInMiniPlayer()) litePlayer.exitInAppMiniPlayer();
-			litePlayer.play(url);
-			return;
+		boolean isWatch = Constant.PAGE_WATCH.equals(UrlUtils.getPageClass(url));
+		if (fragment == tab) {
+			if (isWatch) {
+				if (litePlayer.isInMiniPlayer()) litePlayer.exitInAppMiniPlayer();
+				litePlayer.play(url);
+			} else if (suspendedTab == null && !litePlayer.isInMiniPlayer()) {
+				litePlayer.hide();
+			}
+		} else if (!isWatch && litePlayer.isInMiniPlayer()) {
+			litePlayer.hide();
 		}
-		if (suspendedTab != null || litePlayer.isInMiniPlayer()) return;
-		litePlayer.hide();
 	}
 
 	public void refreshActiveTab() {

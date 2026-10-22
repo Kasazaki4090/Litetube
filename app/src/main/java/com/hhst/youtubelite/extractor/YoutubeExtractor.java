@@ -94,7 +94,7 @@ public final class YoutubeExtractor {
 						gson,
 						auth);
 		NewPipe.init(downloader);
-		NewPipe.setYoutubePlayerClient("web");
+		NewPipe.setYoutubePlayerClient("visionos");
 		NewPipe.setYoutubePoTokenResolver(litePoTokenProvider::resolvePoToken);
 		// PoToken resolver is now set globally in NewPipe
 		// YoutubeStreamExtractor.setPoTokenProvider(litePoTokenProvider);
