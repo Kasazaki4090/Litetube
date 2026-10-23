@@ -1,63 +1,59 @@
 package com.hhst.youtubelite.extractor
 
+import android.webkit.WebView
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
-
 import kotlinx.coroutines.CoroutineScope
 import org.schabi.newpipe.extractor.NewPipe
-import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.TimeUnit
-import java.io.IOException
-import android.webkit.WebView
-import org.schabi.newpipe.extractor.services.youtube.streams.ExtractionContext
 import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
 import org.schabi.newpipe.extractor.services.youtube.streams.StreamDemand
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Stream extraction entry point.
- *
- * [extract] returns immediately; work runs on [scope].
+ * High-performance Stream & Metadata extraction entry point powered by PipePipeExtractor.
  */
 class Extractor(
     downloader: HttpDownloader,
     private val cache: Cache,
     private val scope: CoroutineScope = Promise.DEFAULT_SCOPE,
-    private val host: YoutubeExtractionHost? = null,
 ) {
     private val inFlight = ConcurrentHashMap<String, Inflight>()
     private val streamEpochs = StreamEpochGuard()
-    private val recoveries = ConcurrentHashMap<String, Pair<Inflight, Long>>()
     private val selectionLock = Any()
     private var selectedPreparation: Inflight? = null
-    fun installBrowserCapture(view: WebView, generation: () -> Long) { host?.installBrowserCapture(view, generation) }
-    /** Blocking; compiles the solver and opens connections for an already configured session. */
-    fun initialize(): Boolean = host?.initialize() ?: false
-    fun sessionStamp(): String = host?.scopeHint().orEmpty()
-    fun recoveryScope(): String = host?.recoveryScope().orEmpty()
-    /** Feedback is accepted only when the failed request has an exact, current client plan. */
-    fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext? = null): ClientProfile? =
-        host?.noteMediaForbidden(videoId, url, diagnosticContext)
-    fun extractionDiagnostics(): String = host?.diagnostics?.export() ?: "Legacy Java extraction adapter"
 
     init {
         NewPipe.init(downloader)
+        NewPipe.setYoutubePlayerClient("visionos")
     }
+
+    fun installBrowserCapture(view: WebView, generation: () -> Long) = Unit
+    fun initialize(): Boolean = true
+    fun sessionStamp(): String = ""
+    fun recoveryScope(): String = ""
+    fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext? = null): ClientProfile? = null
+    fun extractionDiagnostics(): String = "PipePipeExtractor Engine (visionos client)"
 
     /**
      * Starts extraction for [urlOrId]. Reuses an in-flight [Extraction] for the same id.
-     *
-     * @throws IllegalArgumentException if [urlOrId] is not a valid id or URL
      */
     fun extract(urlOrId: String, catalog: Boolean = false, demand: StreamDemand? = null, diagnosticContext: DiagnosticContext? = null): Extraction {
         return synchronized(selectionLock) { startExtraction(urlOrId, catalog, demand, false, diagnosticContext).extraction }
     }
 
-    /** Only the selected card, using the exact playback demand and shared task key. */
-    fun preparePlayback(urlOrId: String, demand: StreamDemand) {
+    /**
+     * Drops any cached stream for [urlOrId] and requests fresh stream URLs.
+     */
+    fun extractFresh(urlOrId: String, catalog: Boolean = false, demand: StreamDemand? = null, diagnosticContext: DiagnosticContext? = null): Extraction {
+        val id = VideoId.parse(urlOrId) ?: urlOrId
+        invalidateStream(id)
+        return extract(urlOrId, catalog, demand, diagnosticContext)
+    }
+
+    fun preparePlayback(urlOrId: String, demand: StreamDemand? = null) {
         synchronized(selectionLock) {
             val slot = startExtraction(urlOrId, false, demand, true)
             if (selectedPreparation !== slot) selectedPreparation?.cancelPreparation()
@@ -65,13 +61,29 @@ class Extractor(
         }
     }
 
-    private fun startExtraction(urlOrId: String, catalog: Boolean,
-                                demand: StreamDemand?,
-                                preparation: Boolean, diagnosticContext: DiagnosticContext? = null): Inflight {
+    fun invalidateStream(videoId: String) {
+        streamEpochs.bump(videoId)
+        cache.invalidateStream(videoId)
+    }
+
+    suspend fun awaitMedia(urlOrId: String): Media {
+        val extraction = extract(urlOrId)
+        val metadata = extraction.metadata.await()
+        val stream = extraction.stream.await()
+        return Media(metadata, stream)
+    }
+
+    private fun startExtraction(
+        urlOrId: String,
+        catalog: Boolean,
+        demand: StreamDemand?,
+        preparation: Boolean,
+        diagnosticContext: DiagnosticContext? = null
+    ): Inflight {
         val id = VideoId.parse(urlOrId)
             ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
         val (slot, created) = streamEpochs.withLock(id) {
-            val key = id + ":" + host?.scopeHint().orEmpty() + ":" + catalog + ":" + demand?.cacheKey().orEmpty()
+            val key = id + ":" + catalog + ":" + demand?.cacheKey().orEmpty()
             val existing = inFlight[key] ?: selectedPreparation?.takeIf {
                 it.matches(id, catalog, demand?.cacheKey().orEmpty())
             }
@@ -79,8 +91,16 @@ class Extractor(
                 if (!preparation) existing.claim()
                 existing to false
             } else {
-                val createdSlot = Inflight.create(id, cache, scope, streamEpochs, host,
-                    catalog = catalog, demand = demand, preparation = preparation, diagnosticContext = diagnosticContext)
+                val createdSlot = Inflight.create(
+                    id = id,
+                    cache = cache,
+                    scope = scope,
+                    streamEpochs = streamEpochs,
+                    catalog = catalog,
+                    demand = demand,
+                    preparation = preparation,
+                    diagnosticContext = diagnosticContext
+                )
                 inFlight[key] = createdSlot
                 createdSlot to true
             }
@@ -90,7 +110,7 @@ class Extractor(
             return slot
         }
 
-        val remaining = AtomicInteger(if (host == null) 3 else 2)
+        val remaining = AtomicInteger(3)
         val onSettled = {
             if (remaining.decrementAndGet() == 0) {
                 inFlight.entries.removeIf { it.value === slot }
@@ -98,107 +118,46 @@ class Extractor(
         }
         slot.extraction.metadata.whenDone(onSettled)
         slot.extraction.stream.whenDone(onSettled)
-        if (host == null) slot.extraction.chapters.whenDone(onSettled)
+        slot.extraction.chapters.whenDone(onSettled)
         slot.start()
         return slot
     }
-
-    /**
-     * Suspend until metadata and stream are ready. Cancelling the caller only
-     * cancels this wait — the shared parse and `/player` request keep running
-     * for other waiters (playback).
-     */
-    suspend fun awaitMedia(urlOrId: String, diagnosticContext: DiagnosticContext? = null): Pair<Metadata, Stream> {
-        val extraction = extract(urlOrId, catalog = true, diagnosticContext = diagnosticContext)
-        val metadata = extraction.metadata.await()
-        val stream = extraction.stream.await()
-        return metadata to stream
-    }
-
-    /**
-     * One coordinated fresh extraction per video/session; playback and download join it.
-     * Captures configuration again and clears the complete token/minter context.
-     */
-    fun extractFresh(urlOrId: String, playbackPriority: Boolean = true, diagnosticContext: DiagnosticContext? = null): Extraction {
-        val id = VideoId.parse(urlOrId)
-            ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
-        val recoveryKey = id + ":" + recoveryScope()
-        return synchronized(recoveries) {
-        recoveries.entries.removeIf { it.value.first.extraction.stream.done && System.currentTimeMillis() - it.value.second >= 10_000 }
-        recoveries[recoveryKey]?.let {
-            it.first.logJoin(diagnosticContext)
-            return@synchronized it.first.extraction
-        }
-        if (recoveries.size >= 128) throw IOException("RECOVERY_CAPACITY")
-        invalidateStream(id)
-        val slot = Inflight.create(
-            id,
-            StreamWriteDisabledCache(cache),
-            scope,
-            streamEpochs,
-            host,
-            true,
-            playbackPriority = playbackPriority,
-            diagnosticContext = diagnosticContext,
-        )
-        recoveries[recoveryKey] = slot to System.currentTimeMillis()
-        slot.extraction.stream.whenDone { synchronized(recoveries) { recoveries[recoveryKey] = slot to System.currentTimeMillis() } }
-        slot.start()
-        slot.extraction
-        }
-    }
-
-    /** Like [awaitMedia] but on [extractFresh]. Cancel cancels only this wait. */
-    suspend fun awaitFreshMedia(urlOrId: String, diagnosticContext: DiagnosticContext? = null): Pair<Metadata, Stream> {
-        val extraction = extractFresh(urlOrId, playbackPriority = false, diagnosticContext = diagnosticContext)
-        val metadata = extraction.metadata.await()
-        val stream = extraction.stream.await()
-        return metadata to stream
-    }
-
-    /** Invalidates cached stream data so the next [extract] refetches `/player`. */
-    fun invalidateStream(videoId: String) {
-        val id = VideoId.parse(videoId) ?: return
-        streamEpochs.withLock(id) {
-            streamEpochs.bumpUnlocked(id)
-            cache.invalidateStream(id)
-            host?.invalidateStream(id)
-            inFlight.entries.removeIf { it.value.id == id && it.value.epoch < streamEpochs.epochFor(id) }
-        }
-    }
 }
 
-/**
- * One in-flight [Extractor.extract] for a video id. Identity (not the video
- * id) is what [Extractor] removes from the request table, so a later extract
- * cannot be cleared by an older request's completion or invalidation.
- */
-private class Inflight(
+data class Media(
+    val metadata: Metadata,
+    val stream: Stream,
+)
+
+internal class Inflight(
     val id: String,
     val epoch: Long,
     val extraction: Extraction,
-    private val eagerChapters: Boolean,
+    val network: Boolean,
     val active: AtomicBoolean,
-    private var preparation: Boolean,
-    private val catalog: Boolean,
-    private val demandKey: String,
-    private val sessionCurrent: () -> Boolean,
-    private val diagnosticContext: DiagnosticContext,
+    @Volatile var preparation: Boolean,
+    val catalog: Boolean,
+    val demandKey: String,
+    private val checkCurrent: () -> Boolean,
+    val diagnostic: DiagnosticContext? = null,
 ) {
-    fun logJoin(waiter: DiagnosticContext?) {
-        if (waiter != null && waiter.traceId != diagnosticContext.traceId) AppLog.detail(AppLog.Category.EXTRACTOR,
-            "shared_operation_joined", mapOf("worker_trace_id" to diagnosticContext.traceId,
-                "worker_operation_id" to diagnosticContext.operationId, "preparation" to preparation), waiter)
-    }
     fun claim() { preparation = false }
-    fun cancelPreparation() { if (preparation) active.set(false) }
+    fun cancelPreparation() {
+        if (!preparation) return
+        active.set(false)
+        extraction.metadata.cancel()
+        extraction.stream.cancel()
+        extraction.chapters.cancel()
+    }
     fun matches(id: String, catalog: Boolean, demandKey: String): Boolean =
-        this.id == id && this.catalog == catalog && this.demandKey == demandKey &&
-            active.get() && !extraction.stream.done && sessionCurrent()
+        this.id == id && this.catalog == catalog && this.demandKey == demandKey
+    fun logJoin(context: DiagnosticContext?) {
+        AppLog.detail(AppLog.Category.EXTRACTOR, "inflight_join", mapOf("video_id" to id, "preparation" to preparation), context ?: diagnostic)
+    }
     fun start() {
         extraction.metadata.start()
         extraction.stream.start()
-        if (eagerChapters) extraction.chapters.start()
+        extraction.chapters.start()
     }
 
     companion object {
@@ -207,78 +166,45 @@ private class Inflight(
             cache: Cache,
             scope: CoroutineScope,
             streamEpochs: StreamEpochGuard,
-            host: YoutubeExtractionHost? = null,
-            fresh: Boolean = false,
             catalog: Boolean = false,
             demand: StreamDemand? = null,
-            playbackPriority: Boolean = !catalog,
             preparation: Boolean = false,
             diagnosticContext: DiagnosticContext? = null,
         ): Inflight {
             val epoch = streamEpochs.epochFor(id)
             val active = AtomicBoolean(true)
-            val initialScope = host?.recoveryScope()
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(45)
-            val contextRef = AtomicReference<ExtractionContext>()
-            val diagnostic = (diagnosticContext ?: DiagnosticContext(videoId = id)).child().copy(videoId = id)
-            fun createContext(forceFresh: Boolean) = requireNotNull(host).context(id, forceFresh, catalog || forceFresh,
-                demand, { active.get() && streamEpochs.epochFor(id) == epoch }, deadline, playbackPriority, diagnostic).also(contextRef::set)
-            val context = lazy { contextRef.get() ?: createContext(fresh) }
-            fun activeContext() = contextRef.get() ?: context.value
-            val contextFactory: (() -> ExtractionContext)? =
-                if (host != null) ({ activeContext() }) else null
-            val scopedCache = if (host != null) host.cache(cache) { activeContext() } else cache
-            val resolvedCache = if (fresh) StreamWriteDisabledCache(scopedCache) else scopedCache
-            val player = PlayerPage.shared(id, scope, contextFactory, host?.plans,
-                if (host != null && !fresh) ({ createContext(true) }) else null)
-            val streamCache = EpochGuardedCache(resolvedCache, id, epoch, streamEpochs)
+            val player = PlayerPage.shared(id, scope)
+            val streamCache = EpochGuardedCache(cache, id, epoch, streamEpochs)
             val extraction = Extraction(
                 metadata = Promise(Metadata(), scope, autostart = false) {
-                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "metadata", diagnostic.child())
-                    try { it.resolveMetadata(id, resolvedCache, player).also { operation.finish(DiagnosticOutcome.SUCCESS) } }
-                    catch (failure: Throwable) {
+                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "metadata", diagnosticContext?.child())
+                    try {
+                        it.resolveMetadata(id, cache, player)
+                        operation.finish(DiagnosticOutcome.SUCCESS)
+                    } catch (failure: Throwable) {
                         operation.finish(if (failure is kotlinx.coroutines.CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, failure = failure)
                         throw failure
                     }
                 },
                 stream = Promise(Stream(), scope, autostart = false) {
-                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "stream", diagnostic.child(), mapOf("catalog" to catalog, "fresh" to fresh, "preparation" to preparation))
-                    try { it.resolveStream(id, streamCache, player).also { operation.finish(DiagnosticOutcome.SUCCESS) } }
-                    catch (failure: Throwable) {
+                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "stream", diagnosticContext?.child(), mapOf("catalog" to catalog, "preparation" to preparation))
+                    try {
+                        it.resolveStream(id, streamCache, player)
+                        operation.finish(DiagnosticOutcome.SUCCESS)
+                    } catch (failure: Throwable) {
                         operation.finish(if (failure is kotlinx.coroutines.CancellationException) DiagnosticOutcome.CANCELLED else DiagnosticOutcome.FAILURE, failure = failure)
                         throw failure
                     }
                 },
                 chapters = Promise(ChapterList(), scope, autostart = false) {
-                    it.resolveChapters(id, resolvedCache, player)
+                    it.resolveChapters(id, cache, player)
                 },
             )
-            return Inflight(id, epoch, extraction, host == null, active, preparation, catalog,
-                demand?.cacheKey().orEmpty(), {
-                    contextRef.get()?.let { runCatching { it.check() }.isSuccess }
-                        ?: (host?.recoveryScope() == initialScope)
-                }, diagnostic)
+            return Inflight(id, epoch, extraction, true, active, preparation, catalog, demand?.cacheKey().orEmpty(), { true }, diagnosticContext)
         }
     }
 }
 
-/**
- * Download 403 refresh must not persist googlevideo URLs into the playback
- * stream cache.
- */
-private class StreamWriteDisabledCache(
-    private val inner: Cache,
-) : Cache by inner {
-    override fun getStream(videoId: String): Stream? = null
-    override fun putStream(videoId: String, stream: Stream) = Unit
-    override fun invalidateStream(videoId: String) = Unit
-}
-
-/**
- * [Cache] view that drops stream reads and writes whose [epoch] is no longer
- * current. Check and mutate happen under [StreamEpochGuard.withLock] so an
- * invalidation cannot land between the freshness test and the inner write.
- */
 internal class EpochGuardedCache(
     private val inner: Cache,
     private val id: String,
@@ -305,33 +231,21 @@ internal class EpochGuardedCache(
     }
 }
 
-/**
- * Monotonic per-video epoch counter guarding stream writes after an
- * invalidation. Epochs start at 0 and entries are only created by [bump];
- * they are never reclaimed, so a settled sibling can never make an older
- * still-in-flight extraction look fresh again (its absent-default epoch of
- * 0 would otherwise match its own). The map therefore grows by one Long
- * per invalidated video id.
- */
 internal class StreamEpochGuard {
     private val epochs = ConcurrentHashMap<String, Long>()
     private val locks = ConcurrentHashMap<String, Any>()
 
     private fun lockFor(id: String): Any = locks.computeIfAbsent(id) { Any() }
 
-    /** Serializes epoch checks with cache writes and [Extractor.invalidateStream]. */
     fun <T> withLock(id: String, block: () -> T): T =
         synchronized(lockFor(id)) { block() }
 
-    /** The epoch an extraction started with; 0 before the first bump. */
     fun epochFor(id: String): Long = epochs.getOrDefault(id, 0L)
 
-    /** Invalidates every extraction whose [epochFor] predates this call. */
     fun bump(id: String) {
         withLock(id) { bumpUnlocked(id) }
     }
 
-    /** Caller must already hold [withLock] for [id]. */
     fun bumpUnlocked(id: String) {
         epochs.merge(id, 1L) { old, _ -> old + 1 }
     }

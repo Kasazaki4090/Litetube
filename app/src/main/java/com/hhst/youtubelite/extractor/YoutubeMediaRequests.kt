@@ -21,12 +21,12 @@ import java.io.IOException
 
 /** Shared media request construction and bounded compatibility feedback, injected into consumers. */
 class YoutubeMediaRequests(
-    private val current: (YoutubeSession) -> Boolean,
-    private val diagnostics: ExtractionDiagnostics,
+    private val current: (YoutubeSession) -> Boolean = { true },
+    private val diagnostics: ExtractionDiagnostics = ExtractionDiagnostics(),
     private val invalidationReason: (YoutubeSession) -> String? = { "unknown" },
 ) {
-    // Issued CDN URLs survive page-configuration refreshes; only account or route changes end a read.
-    constructor(sessions: YoutubeSessionProvider, diagnostics: ExtractionDiagnostics) : this(sessions::isMediaCurrent, diagnostics, sessions::mediaInvalidationReason)
+    constructor() : this({ true }, ExtractionDiagnostics(), { "unknown" })
+
     private val plans = LinkedHashMap<String, RequestPlan>(128, .75f, true)
     private val post = LinkedHashSet<String>()
     private val cancellation = Executors.newSingleThreadScheduledExecutor {
@@ -83,8 +83,6 @@ class YoutubeMediaRequests(
             return IOException("MEDIA_SESSION_CHANGED")
         }
         if (!current(plan.session)) throw sessionChanged()
-        // HLS/DASH children inherit the answer's plan but were never catalog URLs.
-        // Bind the plan actually used, so a later media refusal cannot blame a prefetched client.
         register(initial.url.toString(), plan)
         var request = initial.newBuilder().removeHeader("Authorization").removeHeader("Cookie")
             .header("User-Agent", plan.userAgent).apply {
@@ -176,8 +174,6 @@ class YoutubeMediaRequests(
         if (response.code == 206 && cr == null) throw IOException("MEDIA_RANGE_MISSING")
         if (cr != null && !cropped && (cr.start != start || cr.end < cr.start || cr.end > end)) throw IOException("MEDIA_RANGE_MISMATCH")
         val count = cr?.let { it.end - it.start + 1 } ?: length
-        // Range.NONE names the whole object. A player-added Range header is optional, so a 200
-        // without Content-Range is that object and the caller skips to the requested offset.
         val wholeObject = response.code == 200 && query == null && cr == null && plan.range == RequestPlan.Range.NONE
         if (count == 0L || (!wholeObject && (count > wanted || length > wanted))) throw IOException("MEDIA_RANGE_IGNORED")
         if (response.code == 200 && query == null && cr == null && plan.resourceLength > 0 && length != plan.resourceLength) throw IOException("MEDIA_OBJECT_CHANGED")

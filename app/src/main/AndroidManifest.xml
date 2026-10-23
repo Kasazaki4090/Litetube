@@ -2,8 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- The optional sandbox is only loaded on API 26+; older systems use WebView. -->
-    <uses-sdk tools:overrideLibrary="androidx.javascriptengine" />
     <uses-feature android:name="android.software.picture_in_picture" android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -41,9 +39,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.App"
         android:usesCleartextTraffic="false">
-
-        <service android:name=".extractor.EjsRuntimeService"
-            android:exported="false" android:process=":youtube_ejs" />
 
         <activity
             android:name=".MainActivity"

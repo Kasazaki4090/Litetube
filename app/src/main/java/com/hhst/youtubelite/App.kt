@@ -11,7 +11,6 @@ import com.hhst.youtubelite.downloader.engine.DownloadNetworkRestore
 import com.hhst.youtubelite.downloader.engine.DownloadStartupReconciler
 import com.hhst.youtubelite.downloader.engine.KoinDownloadWorkerFactory
 import com.hhst.youtubelite.downloader.engine.DownloadNotificationWatcher
-import com.hhst.youtubelite.extractor.EjsRuntimeProcess
 import com.hhst.youtubelite.extractor.Promise
 import com.hhst.youtubelite.player.datasource.PlayerDataSource
 import com.tencent.mmkv.MMKV
@@ -28,17 +27,8 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         AppLog.initialize(this)
-        if (EjsRuntimeProcess.initialize(this)) return
         Constants.genuineUserAgent = WebSettings.getDefaultUserAgent(this)
         MMKV.initialize(this)
-        // Drop the previous persistent stream URLs/tokens once; completed downloads stay untouched.
-        MMKV.defaultMMKV().let { kv ->
-            if (!kv.decodeBool("youtube-engine-v1-migrated", false)) {
-                kv.allKeys()?.filter { it.startsWith("extractor:stream:") || it == "extractor:client_order" }
-                    ?.forEach(kv::removeValueForKey)
-                kv.encode("youtube-engine-v1-migrated", true)
-            }
-        }
         startKoin {
             androidLogger(Level.ERROR)
             androidContext(this@App)

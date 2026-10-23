@@ -137,7 +137,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.webkit)
-    implementation(libs.androidx.javascriptengine)
+
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.koin.android)
