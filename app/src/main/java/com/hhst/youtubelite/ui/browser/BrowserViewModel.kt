@@ -38,6 +38,12 @@ class BrowserViewModel(
     /** A watch tab became active; show its native surface. */
     var onWatchOpened: ((url: String?) -> Unit)? = null
 
+    /** Active tab navigated to a non-watch page without a suspended watch tab. */
+    var onWatchLeft: (() -> Unit)? = null
+
+    /** Suspended watch tab navigated away from watch while in mini-player. */
+    var onSuspendedWatchLeft: (() -> Unit)? = null
+
     /** Shorts tab left; release the webpage playback ownership. */
     var onShortsClosed: (() -> Unit)? = null
     var onShortsOpened: (() -> Unit)? = null
@@ -251,18 +257,14 @@ class BrowserViewModel(
             _loadRequests.tryEmit(source.id to url)
         }
         override fun onPageStarted(url: String) {
-            tabs.updateUrl(tabId, url)
-            if (_uiState.value.activeId != tabId) return
-            publish(tabs.state(), resetLoading = false)
+            if (!onTabUrlChanged(tabId, url)) return
             _uiState.update {
                 it.copy(url = url, isLoading = true, progress = 0.06f)
             }
         }
 
         override fun onPageFinished(url: String) {
-            tabs.updateUrl(tabId, url)
-            if (_uiState.value.activeId != tabId) return
-            publish(tabs.state(), resetLoading = false)
+            if (!onTabUrlChanged(tabId, url)) return
             _uiState.update {
                 it.copy(
                     url = url,
@@ -292,9 +294,7 @@ class BrowserViewModel(
         }
 
         override fun onHistoryChanged(url: String) {
-            tabs.updateUrl(tabId, url)
-            if (_uiState.value.activeId != tabId) return
-            publish(tabs.state(), resetLoading = false)
+            onTabUrlChanged(tabId, url)
         }
 
         override fun onOpenTab(url: String) {
@@ -304,6 +304,40 @@ class BrowserViewModel(
         override fun onBackRequested() {
             if (_uiState.value.activeId == tabId) onPageBack?.invoke()
         }
+    }
+
+    private fun onTabUrlChanged(tabId: Long, url: String): Boolean {
+        val current = _uiState.value
+        val isWatch = PageKind.isPlayerSurface(PageKind.of(url))
+        if (current.activeId == tabId) {
+            if (isWatch && current.suspendedWatchId != null) {
+                tabs.dropSuspendedWatch()
+            }
+            tabs.updateUrl(tabId, url)
+            publish(tabs.state(), resetLoading = false)
+            if (isWatch) {
+                onWatchOpened?.invoke(url)
+            } else if (
+                !PageKind.isShorts(url) &&
+                !UrlPolicy.isLoginUrl(url) &&
+                _uiState.value.suspendedWatchId == null
+            ) {
+                onWatchLeft?.invoke()
+            }
+            return true
+        }
+        if (current.suspendedWatchId == tabId) {
+            if (!isWatch && !UrlPolicy.isLoginUrl(url)) {
+                val state = tabs.dropSuspendedWatch()
+                publish(state, resetLoading = false)
+                onSuspendedWatchLeft?.invoke()
+            } else {
+                tabs.updateUrl(tabId, url)
+            }
+            return false
+        }
+        tabs.updateUrl(tabId, url)
+        return false
     }
 
     private fun publish(

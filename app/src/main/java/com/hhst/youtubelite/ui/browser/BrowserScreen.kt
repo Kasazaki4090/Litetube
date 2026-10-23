@@ -73,6 +73,7 @@ import com.hhst.youtubelite.browser.BrowserHost
 import com.hhst.youtubelite.browser.PageKind
 import com.hhst.youtubelite.browser.PlayerHooks
 import com.hhst.youtubelite.browser.Tab
+import com.hhst.youtubelite.browser.UrlPolicy
 import com.hhst.youtubelite.browser.WatchPage
 import com.hhst.youtubelite.browser.WebViewFactory
 import com.hhst.youtubelite.browser.TransientUi
@@ -318,12 +319,12 @@ fun BrowserScreen(
 
     val haptics: HapticsController = koinInject()
     // History is per WebView; re-read after switch (inactive tabs skip nav callbacks).
-    LaunchedEffect(activeId, hosts[activeId]) {
+    LaunchedEffect(activeId, uiState.suspendedWatchId, hosts[activeId]) {
         val webView = hosts[activeId]?.webView ?: return@LaunchedEffect
         viewModel.canGoBack = webView.canGoBack()
         hosts.forEach { (id, host) ->
             host.webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('tabVisibilityChanged',{detail:{active:${id == activeId}}}));", null)
-            if (id == activeId) host.webView.onResume() else host.webView.onPause()
+            if (id == activeId || id == uiState.suspendedWatchId) host.webView.onResume() else host.webView.onPause()
         }
     }
 
@@ -353,6 +354,7 @@ fun BrowserScreen(
 
     DisposableEffect(lifecycleOwner, webViewTimers) {
         var timerHandle: WebViewTimerHandle? = null
+        var wasPausedInPip = false
         fun acquireTimers() {
             if (timerHandle != null) return
             timerHandle = webViewTimers.acquire(WebViewTimerOwner.BROWSER)
@@ -366,18 +368,28 @@ fun BrowserScreen(
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     active?.evaluateJavascript("window.dispatchEvent(new CustomEvent('tabVisibilityChanged',{detail:{active:true}}));", null)
+                    if (wasPausedInPip && !(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true)) {
+                        wasPausedInPip = false
+                        active?.evaluateJavascript(
+                            "(function(){window.dispatchEvent(new Event('doUpdateVisitedHistory'));if(location&&location.href&&!location.href.includes('watch')){location.reload();}})();",
+                            null,
+                        )
+                    }
                     playerViewModel.setVideoVisible(playerViewModel.uiState.value.visible)
                     active?.onResume()
                     acquireTimers()
                 }
                 Lifecycle.Event.ON_PAUSE -> {
                     val pausedInPip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity?.isInPictureInPictureMode == true
+                    if (pausedInPip) wasPausedInPip = true
                     playerViewModel.setVideoVisible(pausedInPip)
-                    latestHosts.value.values.forEach {
-                        it.webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('tabVisibilityChanged',{detail:{active:false}}));", null)
-                        it.webView.onPause()
+                    if (!pausedInPip) {
+                        latestHosts.value.values.forEach {
+                            it.webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('tabVisibilityChanged',{detail:{active:false}}));", null)
+                            it.webView.onPause()
+                        }
+                        releaseTimers()
                     }
-                    releaseTimers()
                     // "Visible" not "playing": pausing an already-paused player is harmless.
                     val playerVisible = playerViewModel.uiState.value.visible
                     if (playerVisible && !pausedInPip && !playerViewModel.audioOnlyBackground &&
@@ -523,12 +535,16 @@ fun BrowserScreen(
     DisposableEffect(viewModel, playerViewModel) {
         viewModel.onWatchSuspended = { playerViewModel.enterMiniPlayer() }
         viewModel.onWatchOpened = { playerViewModel.onReturnToWatch(it) }
+        viewModel.onWatchLeft = { playerViewModel.onLeaveWatch() }
+        viewModel.onSuspendedWatchLeft = { playerViewModel.onSuspendedWatchLeft() }
         viewModel.onShortsClosed = { playerViewModel.onShortsClosed() }
         viewModel.onShortsOpened = { playerViewModel.onShortsOpened() }
         viewModel.onTabSwitched = { haptics.perform(HapticsController.Event.TAB) }
         onDispose {
             viewModel.onWatchSuspended = null
             viewModel.onWatchOpened = null
+            viewModel.onWatchLeft = null
+            viewModel.onSuspendedWatchLeft = null
             viewModel.onShortsClosed = null
             viewModel.onShortsOpened = null
             viewModel.onTabSwitched = null
@@ -552,14 +568,14 @@ fun BrowserScreen(
             playerViewModel.onShortsOpened()
             return@LaunchedEffect
         }
+        if (VideoId.parse(uiState.url) != null) {
+            if (playerState.mini) {
+                playerViewModel.onReturnToWatch(uiState.url)
+            }
+            return@LaunchedEffect
+        }
         if (uiState.suspendedWatchId != null) return@LaunchedEffect
-        if (VideoId.parse(uiState.url) != null) return@LaunchedEffect
-        if (playerState.visible &&
-            !playerState.mini &&
-            extensionManager.isEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER)
-        ) {
-            playerViewModel.enterMiniPlayer()
-        } else {
+        if (!playerState.mini && !UrlPolicy.isLoginUrl(uiState.url)) {
             playerViewModel.onLeaveWatch()
         }
     }

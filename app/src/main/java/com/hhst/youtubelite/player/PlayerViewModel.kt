@@ -483,8 +483,9 @@ class PlayerViewModel(
             playbackOrigin = origin
             return
         }
+        val sameTabAsOrigin = origin.isHost || playbackOrigin == null || origin.tabId == playbackOrigin?.tabId
         if (!origin.isHost) playbackOrigin = origin
-        startPlayback(url, keepMini = _uiState.value.mini)
+        startPlayback(url, keepMini = _uiState.value.mini && sameTabAsOrigin)
     }
 
     override fun prepareVideo(url: String) {
@@ -535,6 +536,15 @@ class PlayerViewModel(
     /** Page left watch (JS or tab URL). Same path as [hidePlayer]. */
     fun onLeaveWatch() = hidePlayer(PageOrigin.HOST)
 
+    /** Suspended watch tab navigated away from watch while in mini-player. */
+    fun onSuspendedWatchLeft() {
+        val state = _uiState.value
+        if (!state.mini) return
+        val casting = state.casting
+        if (casting) engine.pauseLocal()
+        stopAndHide(pausePlayback = !casting)
+    }
+
     override fun setPlayerLayout(topDp: Int, heightDp: Int, origin: PageOrigin) {
         if (!acceptsPageCallback(playbackOrigin, origin)) return
         // Viewport-relative page-player box from player-hook.js. The top is
@@ -573,6 +583,10 @@ class PlayerViewModel(
                     it.copy(mini = false, visible = true, controlsVisible = true)
                 }
                 applyAutoFullscreen()
+                val pageId = VideoId.parse(pageUrl)
+                if (pageId != null && pageId != state.videoId && pageUrl != null) {
+                    startPlayback(pageUrl, keepMini = false)
+                }
             }
             return
         }

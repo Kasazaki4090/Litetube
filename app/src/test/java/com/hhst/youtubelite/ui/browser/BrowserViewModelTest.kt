@@ -406,6 +406,39 @@ class BrowserViewModelTest {
         assertEquals(Constants.PAGE_SUBSCRIPTIONS, activeKind(vm))
     }
 
+    @Test
+    fun onHistoryChanged_activeTabToWatch_dropsSuspendedAndSignalsWatchOpened() {
+        val vm = vm(miniEnabled = true, playerShowing = true)
+        vm.openTab("https://m.youtube.com/watch?v=aaaaaaaaaaa")
+        vm.openTab("https://m.youtube.com/@channel")
+        assertNotNull(vm.uiState.value.suspendedWatchId)
+        var openedUrl: String? = null
+        vm.onWatchOpened = { openedUrl = it }
+
+        val activeId = vm.uiState.value.activeId
+        vm.callbacksFor(activeId).onHistoryChanged("https://m.youtube.com/watch?v=bbbbbbbbbbb")
+
+        assertNull(vm.uiState.value.suspendedWatchId)
+        assertEquals(Constants.PAGE_WATCH, activeKind(vm))
+        assertEquals("https://m.youtube.com/watch?v=bbbbbbbbbbb", openedUrl)
+    }
+
+    @Test
+    fun onHistoryChanged_suspendedWatchToNonWatch_dropsSuspendedAndSignalsLeft() {
+        val vm = vm(miniEnabled = true, playerShowing = true)
+        vm.openTab("https://m.youtube.com/watch?v=aaaaaaaaaaa")
+        val watchId = vm.uiState.value.activeId
+        vm.openTab("https://m.youtube.com/@channel")
+        assertEquals(watchId, vm.uiState.value.suspendedWatchId)
+        var suspendedLeft = 0
+        vm.onSuspendedWatchLeft = { suspendedLeft++ }
+
+        vm.callbacksFor(watchId).onHistoryChanged("https://m.youtube.com/")
+
+        assertNull(vm.uiState.value.suspendedWatchId)
+        assertEquals(1, suspendedLeft)
+    }
+
     private fun activeKind(vm: BrowserViewModel): String? {
         val state = vm.uiState.value
         return state.tabs.find { it.id == state.activeId }?.kind
