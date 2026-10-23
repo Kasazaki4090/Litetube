@@ -66,6 +66,7 @@ object WebViewFactory {
     private const val DISLIKES_JS = "script/display_dislikes.js"
     private const val HIDE_SHORTS_JS = "script/hide_shorts.js"
     private const val SHORTS_ADS_JS = "script/remove_shorts_ads.js"
+    private const val SUBSCRIBE_BUTTON_JS = "script/subscribe_button.js"
     private const val CORE_JS = "script/core.js"
 
     private val coreScript = PageScript(CORE_JS, "Core")
@@ -75,6 +76,7 @@ object WebViewFactory {
     private val dislikesScript = PageScript(DISLIKES_JS, "DisplayDislikes")
     private val hideShortsScript = PageScript(HIDE_SHORTS_JS, "HideShorts")
     private val shortsAdsScript = PageScript(SHORTS_ADS_JS, "RemoveShortsAds")
+    private val subscribeButtonScript = PageScript(SUBSCRIBE_BUTTON_JS, "SubscribeButton")
     private val shortsScript = PageScript("script/shorts.js", "Shorts")
     private val shortsQualityScript = PageScript("script/shorts-quality.js", "ShortsQuality")
     private val galleryScript = PageScript("script/gallery.js", "Gallery")
@@ -173,6 +175,7 @@ object WebViewFactory {
             dislikesScript.install(appContext, this)
             hideShortsScript.install(appContext, this)
             shortsAdsScript.install(appContext, this)
+            subscribeButtonScript.install(appContext, this)
             shortsScript.install(appContext, this)
             shortsQualityScript.install(appContext, this)
             galleryScript.install(appContext, this)
@@ -190,6 +193,7 @@ object WebViewFactory {
                 dislikes = dislikesScript,
                 hideShorts = hideShortsScript,
                 shortsAds = shortsAdsScript,
+                subscribeButton = subscribeButtonScript,
                 downloadScript = downloadScript,
                 downloadBridge = downloadBridge,
                 bridge = bridge,
@@ -236,6 +240,7 @@ private class BrowserWebViewClient(
     private val dislikes: PageScript,
     private val hideShorts: PageScript,
     private val shortsAds: PageScript,
+    private val subscribeButton: PageScript,
     private val downloadScript: PageScript,
     private val downloadBridge: DownloadWebBridge,
     private val bridge: Bridge,
@@ -283,6 +288,7 @@ private class BrowserWebViewClient(
         dislikes.inject(appContext, view)
         hideShorts.inject(appContext, view)
         shortsAds.inject(appContext, view)
+        subscribeButton.inject(appContext, view)
         downloadBridge.stamp(view)
         downloadScript.inject(appContext, view)
         injector.inject(view)
@@ -320,6 +326,7 @@ private class BrowserWebViewClient(
         }
         if (UrlPolicy.shouldInject(url) && hasDocumentStartScript) {
             injector.inject(view)
+            subscribeButton.inject(appContext, view)
             downloadBridge.stamp(view)
             downloadScript.inject(appContext, view)
         } else {
@@ -336,6 +343,7 @@ private class BrowserWebViewClient(
         updateRefreshEnabled(url)
         if (UrlPolicy.shouldInject(url)) {
             injector.inject(view)
+            subscribeButton.inject(appContext, view)
             downloadBridge.bumpPage()
             downloadBridge.stamp(view)
             downloadScript.inject(appContext, view)
