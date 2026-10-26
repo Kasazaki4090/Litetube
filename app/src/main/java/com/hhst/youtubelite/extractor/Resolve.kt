@@ -8,7 +8,6 @@ import kotlinx.coroutines.runBlocking
 import org.schabi.newpipe.extractor.Image
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.AudioStream
-import org.schabi.newpipe.extractor.stream.AudioTrackType
 import org.schabi.newpipe.extractor.stream.StreamExtractor
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamType
@@ -87,7 +86,7 @@ internal fun Promise<ChapterList>.resolveChapters(
         return
     }
     val extractor = player().extractor
-    val chapters = runCatching { StreamInfo.getSegments(extractor) }.getOrDefault(emptyList()).map {
+    val chapters = runCatching { extractor.streamSegments }.getOrDefault(emptyList()).map {
         Chapter(
             title = it.title.orEmpty(),
             startSeconds = it.startTimeSeconds,
@@ -180,11 +179,11 @@ private fun AudioStream.toFormat(): Format {
         approxDurationMs = item?.approxDurationMs ?: -1L,
         sampleRate = item?.sampleRate ?: -1,
         audioChannels = item?.audioChannels ?: -1,
-        audioLocale = audioLocale?.toLanguageTag()?.takeIf { it.isNotBlank() },
+        audioLocale = audioLocale?.takeIf { it.isNotBlank() },
         audioTrackId = audioTrackId?.takeIf { it.isNotBlank() },
         audioTrackName = audioTrackName?.takeIf { it.isNotBlank() },
-        audioTrackType = audioTrackType?.name?.lowercase(),
-        audioTrackOriginal = audioTrackType == AudioTrackType.ORIGINAL,
+        audioTrackType = null,
+        audioTrackOriginal = false,
     )
 }
 

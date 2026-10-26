@@ -51,6 +51,21 @@ class Promise<T>(
         if (autostart) start()
     }
 
+    fun cancel() {
+        if (!started.compareAndSet(false, true)) return
+        val ex = kotlinx.coroutines.CancellationException("Promise cancelled")
+        failure.compareAndSet(null, ex)
+        elapsedMs = (System.nanoTime() - startedAtNs) / 1_000_000L
+        val listeners: List<() -> Unit>
+        synchronized(doneLock) {
+            done = true
+            listeners = doneListeners.toList()
+            doneListeners.clear()
+        }
+        deferred.completeExceptionally(ex)
+        listeners.forEach { listener -> runCatching { listener() } }
+    }
+
     /** Launches [work] once. Safe to call more than once. */
     internal fun start() {
         if (!started.compareAndSet(false, true)) return

@@ -1330,8 +1330,8 @@ class PlaybackEngine(
         val media = try { withContext(Dispatchers.IO) { extractor.awaitMedia(id) } }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { return null }
-        if (!stillCurrent(generation) || _snapshot.value.videoId != id || media.first.id != id) return null
-        currentStream = media.second
+        if (!stillCurrent(generation) || _snapshot.value.videoId != id || media.metadata.id != id) return null
+        currentStream = media.stream
         return currentCastSource()
     }
 

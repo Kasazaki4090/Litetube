@@ -61,13 +61,22 @@ class Extractor(
         }
     }
 
-    fun invalidateStream(videoId: String) {
-        streamEpochs.bump(videoId)
-        cache.invalidateStream(videoId)
+    fun invalidateStream(urlOrId: String) {
+        val id = VideoId.parse(urlOrId) ?: return
+        streamEpochs.bump(id)
+        cache.invalidateStream(id)
+        inFlight.entries.removeIf { it.value.id == id }
     }
 
-    suspend fun awaitMedia(urlOrId: String): Media {
-        val extraction = extract(urlOrId)
+    suspend fun awaitMedia(urlOrId: String, diagnosticContext: DiagnosticContext? = null): Media {
+        val extraction = extract(urlOrId, diagnosticContext = diagnosticContext)
+        val metadata = extraction.metadata.await()
+        val stream = extraction.stream.await()
+        return Media(metadata, stream)
+    }
+
+    suspend fun awaitFreshMedia(urlOrId: String, diagnosticContext: DiagnosticContext? = null): Media {
+        val extraction = extractFresh(urlOrId, diagnosticContext = diagnosticContext)
         val metadata = extraction.metadata.await()
         val stream = extraction.stream.await()
         return Media(metadata, stream)
@@ -83,9 +92,10 @@ class Extractor(
         val id = VideoId.parse(urlOrId)
             ?: throw IllegalArgumentException("Invalid YouTube url or id: $urlOrId")
         val (slot, created) = streamEpochs.withLock(id) {
+            val epoch = streamEpochs.epochFor(id)
             val key = id + ":" + catalog + ":" + demand?.cacheKey().orEmpty()
-            val existing = inFlight[key] ?: selectedPreparation?.takeIf {
-                it.matches(id, catalog, demand?.cacheKey().orEmpty())
+            val existing = inFlight[key]?.takeIf { it.epoch == epoch } ?: selectedPreparation?.takeIf {
+                it.epoch == epoch && it.matches(id, catalog, demand?.cacheKey().orEmpty())
             }
             if (existing != null && existing.active.get()) {
                 if (!preparation) existing.claim()
@@ -177,7 +187,7 @@ internal class Inflight(
             val streamCache = EpochGuardedCache(cache, id, epoch, streamEpochs)
             val extraction = Extraction(
                 metadata = Promise(Metadata(), scope, autostart = false) {
-                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "metadata", diagnosticContext?.child())
+                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "metadata", diagnosticContext?.child() ?: DiagnosticContext())
                     try {
                         it.resolveMetadata(id, cache, player)
                         operation.finish(DiagnosticOutcome.SUCCESS)
@@ -187,7 +197,7 @@ internal class Inflight(
                     }
                 },
                 stream = Promise(Stream(), scope, autostart = false) {
-                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "stream", diagnosticContext?.child(), mapOf("catalog" to catalog, "preparation" to preparation))
+                    val operation = AppLog.operation(AppLog.Category.EXTRACTOR, "stream", diagnosticContext?.child() ?: DiagnosticContext(), mapOf("catalog" to catalog, "preparation" to preparation))
                     try {
                         it.resolveStream(id, streamCache, player)
                         operation.finish(DiagnosticOutcome.SUCCESS)

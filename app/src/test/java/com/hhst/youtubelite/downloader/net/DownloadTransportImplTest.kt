@@ -452,7 +452,7 @@ class DownloadTransportImplTest {
         server.enqueue(MockResponse().setResponseCode(416).setHeader("Content-Range", "bytes */12"))
         val session = org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession(
             "test", org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession.Account.ANONYMOUS,
-            0, null, null, null, null, "UA", 0, null, "test", com.grack.nanojson.JsonObject(), { "" })
+            0, null, null, null, null, "UA", 0, null, "test", com.google.gson.JsonObject(), { "" })
         val plan = RequestPlan(session,
             org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS,
             RequestPlan.Protocol.HTTPS,

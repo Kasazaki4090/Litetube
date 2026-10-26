@@ -23,7 +23,7 @@ import com.hhst.youtubelite.downloader.resolve.DownloadResolverImpl
 import com.hhst.youtubelite.downloader.resolve.audioFormat
 import com.hhst.youtubelite.downloader.resolve.muxedFormat
 import com.hhst.youtubelite.downloader.resolve.subtitle
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession

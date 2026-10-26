@@ -1,6 +1,6 @@
 package org.schabi.newpipe.extractor.services.youtube.streams
 
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import java.io.IOException
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
