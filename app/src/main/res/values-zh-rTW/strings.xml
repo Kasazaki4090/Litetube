@@ -40,6 +40,7 @@
     <string name="remember_quality">記住影片畫質</string>
     <string name="remember_playback_speed">記住播放速度</string>
     <string name="remember_resize_mode">記住縮放模式</string>
+    <string name="remember_subtitle_language">記住上次選中的字幕語言</string>
     <string name="use_original_title">使用原始標題</string>
     <string name="reset_all_settings">重設所有設定</string>
     <string name="reset_extension_title">重設擴充功能</string>

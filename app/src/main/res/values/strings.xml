@@ -40,6 +40,7 @@
     <string name="remember_quality">Remember video quality</string>
     <string name="remember_playback_speed">Remember speed</string>
     <string name="remember_resize_mode">Remember resize mode</string>
+    <string name="remember_subtitle_language">Remember last subtitle language</string>
     <string name="use_original_title">Use original title</string>
     <string name="reset_all_settings">Reset all settings</string>
     <string name="reset_extension_title">Reset extensions</string>

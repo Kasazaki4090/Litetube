@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.database.ContentObserver
 import android.media.AudioManager
 import android.os.Handler
@@ -57,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -330,6 +332,12 @@ fun BrowserScreen(
 
     val latestHosts = rememberUpdatedState(hosts)
     val latestActiveId = rememberUpdatedState(activeId)
+    val isDarkTheme = (LocalConfiguration.current.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    LaunchedEffect(isDarkTheme, liveTabIds) {
+        hosts.values.forEach { host ->
+            WebViewFactory.syncTheme(host.webView, isDarkTheme)
+        }
+    }
 
     // Preference flips must reach already-rendered pages: the injected
     // scripts listen for this event to re-read prefs without a reload.

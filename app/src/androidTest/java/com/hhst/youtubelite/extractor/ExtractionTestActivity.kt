@@ -13,3 +13,4 @@ class ExtractionTestActivity : Activity() {
 		setContentView(surface)
 	}
 }
+

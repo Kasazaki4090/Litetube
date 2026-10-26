@@ -51,6 +51,7 @@ data class Extension(
                     toggle(PreferenceKeys.REMEMBER_QUALITY, R.string.remember_quality),
                     toggle(PreferenceKeys.REMEMBER_PLAYBACK_SPEED, R.string.remember_playback_speed),
                     toggle(PreferenceKeys.REMEMBER_RESIZE_MODE, R.string.remember_resize_mode),
+                    toggle(PreferenceKeys.REMEMBER_SUBTITLE_LANGUAGE, R.string.remember_subtitle_language),
                     toggle(PreferenceKeys.USE_ORIGINAL_TITLE, R.string.use_original_title),
                 ),
             ),

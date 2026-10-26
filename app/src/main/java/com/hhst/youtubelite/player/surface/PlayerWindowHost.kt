@@ -5,8 +5,10 @@ import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
+import android.os.Build
 import android.util.Rational
 import android.view.ViewTreeObserver
+import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -149,7 +151,16 @@ class PlayerWindowHost(
     /** Refresh after a dialog/chooser returns focus, without rotating again. */
     fun refreshSystemBars(fullscreen: Boolean) {
         val window = activity?.window ?: return
-        if (fullscreen) WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (fullscreen) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val params = window.attributes
+                if (params.layoutInDisplayCutoutMode != WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES) {
+                    params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    window.attributes = params
+                }
+            }
+        }
         WindowInsetsControllerCompat(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             if (fullscreen) hide(WindowInsetsCompat.Type.systemBars())

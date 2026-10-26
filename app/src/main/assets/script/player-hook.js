@@ -103,12 +103,14 @@
         const entry = { player: p, video: v, id, requested: false, pauseTimer: null };
         // Allow the PLAYING transition to initialize watch tracking before pausing.
         const pause = () => {
+          if (window.__liteSyncing) return;
           if (entry !== suppressedPlayer || Lite.isShorts() || Lite.id() !== entry.id) return;
           if (typeof p.playVideo === 'function' && !entry.requested) return;
           if (p.classList.contains('ad-showing') || p.classList.contains('ad-interrupting')) return;
           if (entry.pauseTimer != null) return;
           entry.pauseTimer = setTimeout(() => {
             entry.pauseTimer = null;
+            if (window.__liteSyncing) return;
             if (entry !== suppressedPlayer || Lite.isShorts() || Lite.id() !== entry.id) return;
             // A startup seek can put the controller back into BUFFERING after
             // PLAYING. Let the post-seek PLAYING transition run its tracking.
@@ -466,6 +468,34 @@
     if (target.protocol !== 'https:' || !/(^|\.)youtube\.com$/.test(target.hostname) || !Lite.id(target.href)) return false;
     location.href = target.href;
     return true;
+  };
+
+  window.__syncPageProgress = function (targetSec) {
+    try {
+      const p = pagePlayer();
+      if (!p || typeof p.seekTo !== 'function' || window.__liteSyncing) return;
+      const vid = p.getVideoData?.()?.video_id || Lite.id();
+      if (!vid) return;
+      const target = Number(targetSec) || 0;
+      const current = Number(p.getCurrentTime?.()) || 0;
+      const duration = Number(p.getDuration?.()) || 0;
+      const isEnd = duration > 0 && Math.abs(duration - target) < 2;
+      if (Math.abs(current - target) > 2 || isEnd) {
+        const sessionKey = '__lite_end_sync_' + vid;
+        try {
+          if (isEnd && sessionStorage?.getItem?.(sessionKey) === 'true') return;
+        } catch {}
+        window.__liteSyncing = true;
+        p.seekTo(target, true);
+        p.playVideo?.();
+        try {
+          if (isEnd) sessionStorage?.setItem?.(sessionKey, 'true');
+        } catch {}
+        setTimeout(() => {
+          try { p.pauseVideo?.(); } finally { window.__liteSyncing = false; }
+        }, isEnd ? 500 : 300);
+      }
+    } catch {}
   };
 
   // -- long-press media card → native menu --

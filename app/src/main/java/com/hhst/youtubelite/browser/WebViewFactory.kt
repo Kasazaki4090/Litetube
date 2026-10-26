@@ -15,6 +15,7 @@ import android.graphics.Color
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
@@ -28,6 +29,7 @@ import android.widget.Toast
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.createBitmap
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import com.hhst.youtubelite.R
 import com.hhst.youtubelite.core.Constants
@@ -57,6 +59,96 @@ object WebViewFactory {
     internal fun prepareBackground(webView: WebView, url: String) {
         val dark = webView.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         webView.setBackgroundColor(if (PageKind.isShorts(url) || dark) Color.BLACK else Color.WHITE)
+    }
+
+    internal fun syncTheme(webView: WebView, isDark: Boolean) {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                    WebSettingsCompat.setAlgorithmicDarkeningAllowed(webView.settings, isDark)
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+                    @Suppress("DEPRECATION")
+                    WebSettingsCompat.setForceDark(
+                        webView.settings,
+                        if (isDark) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF,
+                    )
+                }
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+                    @Suppress("DEPRECATION")
+                    WebSettingsCompat.setForceDarkStrategy(
+                        webView.settings,
+                        WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING,
+                    )
+                }
+            }
+        }
+        runCatching {
+            val cookieManager = CookieManager.getInstance()
+            val cookies = cookieManager.getCookie("https://m.youtube.com") ?: ""
+            var prefValue: String? = null
+            for (cookie in cookies.split(";")) {
+                val trimmed = cookie.trim()
+                if (trimmed.startsWith("PREF=")) {
+                    prefValue = trimmed.substring(5)
+                    break
+                }
+            }
+            val f6Val = if (isDark) "f6=400" else "f6=10000"
+            val newPref = when {
+                prefValue == null -> f6Val
+                prefValue.contains(Regex("f6=[0-9a-fA-F]+")) ->
+                    prefValue.replace(Regex("f6=[0-9a-fA-F]+"), f6Val)
+                else -> "$prefValue&$f6Val"
+            }
+            if (newPref != prefValue) {
+                cookieManager.setCookie(
+                    ".youtube.com",
+                    "PREF=$newPref; Domain=.youtube.com; Path=/; Secure; SameSite=None",
+                )
+                persistCookies()
+            }
+        }
+        val currentUrl = webView.url
+        if (!currentUrl.isNullOrBlank()) {
+            webView.setBackgroundColor(if (PageKind.isShorts(currentUrl) || isDark) Color.BLACK else Color.WHITE)
+        }
+        if (UrlPolicy.shouldInject(currentUrl)) {
+            val js = "(function(isDark) {" +
+                "var html = document.documentElement;" +
+                "if (!html) return;" +
+                "html.style.colorScheme = isDark ? 'dark' : 'light';" +
+                "if (isDark) {" +
+                "  html.setAttribute('dark', 'true');" +
+                "  if (document.body) document.body.setAttribute('dark', 'true');" +
+                "  html.style.backgroundColor = '#0f0f0f';" +
+                "  if (document.body) document.body.style.backgroundColor = '#0f0f0f';" +
+                "  html.style.setProperty('--yt-spec-base-background', '#0f0f0f');" +
+                "  html.style.setProperty('--yt-spec-raised-background', '#212121');" +
+                "  html.style.setProperty('--yt-spec-menu-background', '#282828');" +
+                "  html.style.setProperty('--yt-spec-text-primary', '#f1f1f1');" +
+                "  html.style.setProperty('--yt-spec-text-secondary', '#aaaaaa');" +
+                "  html.style.setProperty('--yt-spec-10-percent-layer', 'rgba(255, 255, 255, 0.1)');" +
+                "} else {" +
+                "  html.removeAttribute('dark');" +
+                "  if (document.body) document.body.removeAttribute('dark');" +
+                "  html.style.backgroundColor = '#ffffff';" +
+                "  if (document.body) document.body.style.backgroundColor = '#ffffff';" +
+                "  html.style.setProperty('--yt-spec-base-background', '#ffffff');" +
+                "  html.style.setProperty('--yt-spec-raised-background', '#ffffff');" +
+                "  html.style.setProperty('--yt-spec-menu-background', '#ffffff');" +
+                "  html.style.setProperty('--yt-spec-text-primary', '#0f0f0f');" +
+                "  html.style.setProperty('--yt-spec-text-secondary', '#606060');" +
+                "  html.style.setProperty('--yt-spec-10-percent-layer', 'rgba(0, 0, 0, 0.1)');" +
+                "}" +
+                "var app = document.querySelector('ytm-app');" +
+                "if (app && typeof app.setTheme === 'function') {" +
+                "  try { app.setTheme(isDark ? 'DARK' : 'LIGHT'); } catch(e) {}" +
+                "}" +
+                "})($isDark);"
+            webView.evaluateJavascript(js, null)
+        }
     }
 
 
@@ -164,6 +256,8 @@ object WebViewFactory {
                 setSupportMultipleWindows(false)
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             }
+            val initialDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+            syncTheme(this, initialDark)
             addJavascriptInterface(bridge, Bridge.NAME)
             extractor.installBrowserCapture(this) { bridge.pageOrigin().documentGeneration }
             coreScript.install(appContext, this)
@@ -332,6 +426,8 @@ private class BrowserWebViewClient(
         } else {
             injectAll(view)
         }
+        val isDark = view.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        WebViewFactory.syncTheme(view, isDark)
         callbacks.onPageFinished(url)
         callbacks.onNavigationStateChanged(view.canGoBack())
     }

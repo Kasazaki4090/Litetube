@@ -32,6 +32,7 @@ class ExtensionCatalogTest {
             PreferenceKeys.REMEMBER_PLAYBACK_SPEED,
             PreferenceKeys.REMEMBER_LAST_POSITION,
             PreferenceKeys.REMEMBER_RESIZE_MODE,
+            PreferenceKeys.REMEMBER_SUBTITLE_LANGUAGE,
             PreferenceKeys.ENABLE_PIP,
             PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER,
             PreferenceKeys.ENABLE_BACKGROUND_PLAY,

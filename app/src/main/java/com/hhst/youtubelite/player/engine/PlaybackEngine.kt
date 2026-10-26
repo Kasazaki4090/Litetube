@@ -1898,6 +1898,7 @@ class PlaybackEngine(
     }
 
     private fun rememberedSubtitleKey(): String? {
+        if (!prefs.isEnabled(PreferenceKeys.REMEMBER_SUBTITLE_LANGUAGE)) return null
         if (cache.get(KEY_SUBTITLE_OFF, String::class.java) != null) return null
         return cache.get(KEY_SUBTITLE, String::class.java)
     }

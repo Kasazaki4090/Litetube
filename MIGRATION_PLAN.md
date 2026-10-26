@@ -70,3 +70,8 @@ graph TD
 - [x] **Step 5：兼容层补齐与全量符号检查 (`YoutubeStreamsCompat.kt` 等)**
   - 新增 `org.schabi.newpipe.extractor.services.youtube.streams.YoutubeStreamsCompat.kt`，提供轻量兼容模型（`ClientProfile`、`FormatKey`、`StreamDemand`、`YoutubeSession`、`RequestPlan`、`ExtractionContext`、`StreamHttpException`），使 Media3 播放、缓存、下载、诊断模块与 `PipePipeExtractor` 无缝衔接。
   - 在 `Models.kt` 补齐 `ByteArray.hexString()` 扩展，在 `YoutubePlaybackCacheKey.kt` 完善无 `resourceIdentity` 时的 `ofQuery` 缓存键回退，在 `androidTest` 补齐 `ExtractionTestActivity.kt`。
+- [x] **Step 6：旧分支 (`PipepipeExtractor`) 细节优化全量合入**
+  - **全屏刘海屏/挖孔屏铺满优化 (`e21fbc6`)**：在 `PlayerWindowHost.refreshSystemBars()` 中为 Android P (API 28+) 全屏模式设置 `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES`，消除横屏全屏两侧黑边（配合 v3 已有的 `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` 与窗口内 Compose 弹层 `FullscreenPlayerSheet`，彻底解决全屏状态栏闪烁与黑边问题）。
+  - **原生播放器 → 网页 `#movie_player` 观看进度实时回写 (`9d8aeb1` / `e21fbc6`)**：在 `player-hook.js` 中暴露 `window.__syncPageProgress(targetSec)`（带 `window.__liteSyncing` 防递归锁），并在 `PlayerViewModel.maybeSyncWebProgress()` 中于每 5 秒、暂停瞬间及播放结束时自动将进度同步至网页端播放器，确保 YouTube 账号跨端观看历史与红条进度实时更新。
+  - **记住字幕语言开关与中文字幕跨变体智能匹配 (`e390cb0`)**：新增 `PreferenceKeys.REMEMBER_SUBTITLE_LANGUAGE` 设置项（默认开启）及多语言文案，并在 `SubtitleSelection.select()` 中支持简繁及地区代码（`zh-Hans`、`zh-CN`、`zh-Hant`、`zh-TW`、`zh-HK`、`zh-SG`、`zh-MO`、`zh`）跨变体回退匹配。
+  - **WebView 深浅色主题实时同步 (`dc75ae6`)**：在 `WebViewFactory.syncTheme()` 与 `BrowserScreen` 中联动系统深浅色模式（配置 `WebSettingsCompat` 暗色策略、更新 `.youtube.com` 的 `PREF` Cookie `f6=400/10000` 并实时注入 DOM/CSS 变量与 `ytm-app.setTheme`），无需重启即可无缝切换网页深浅色外观。

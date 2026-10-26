@@ -9,6 +9,7 @@ object PreferenceKeys {
     const val REMEMBER_PLAYBACK_SPEED = "remember_playback_speed"
     const val REMEMBER_LAST_POSITION = "remember_last_position"
     const val REMEMBER_RESIZE_MODE = "remember_resize_mode"
+    const val REMEMBER_SUBTITLE_LANGUAGE = "remember_subtitle_language"
     const val USE_ORIGINAL_TITLE = "use_original_title"
 
     const val ENABLE_BACKGROUND_PLAY = "enable_background_play"
@@ -83,6 +84,7 @@ object PreferenceKeys {
         ENABLE_PIP to true,
         ENABLE_IN_APP_MINI_PLAYER to true,
         REMEMBER_RESIZE_MODE to false,
+        REMEMBER_SUBTITLE_LANGUAGE to true,
         REMEMBER_PLAYBACK_SPEED to false,
         USE_ORIGINAL_TITLE to false,
         GESTURE_TAP_WINDOWED to true,

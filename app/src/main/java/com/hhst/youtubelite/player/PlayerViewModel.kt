@@ -445,6 +445,33 @@ class PlayerViewModel(
             )
         }
         maybeSyncQueue(s)
+        maybeSyncWebProgress(s)
+    }
+
+    private var lastSyncedWebVideoId: String? = null
+    private var lastSyncedWebPosMs: Long = -1L
+    private var lastSyncedWebPlaying: Boolean = false
+
+    private fun maybeSyncWebProgress(s: PlaybackSnapshot) {
+        if (!s.prepared || s.isLive) return
+        val id = s.videoId ?: return
+        if (id != lastSyncedWebVideoId) {
+            lastSyncedWebVideoId = id
+            lastSyncedWebPosMs = -1L
+            lastSyncedWebPlaying = false
+        }
+        val wasPlaying = lastSyncedWebPlaying
+        lastSyncedWebPlaying = s.isPlaying
+        val targetMs = when {
+            s.ended -> s.durationMs.takeIf { it > 0L } ?: s.positionMs
+            wasPlaying && !s.isPlaying -> s.positionMs
+            s.isPlaying && (lastSyncedWebPosMs < 0L || kotlin.math.abs(s.positionMs - lastSyncedWebPosMs) >= 5_000L) -> s.positionMs
+            else -> return
+        }
+        if (targetMs <= 0L) return
+        lastSyncedWebPosMs = targetMs
+        val posSec = targetMs / 1000.0
+        watchPage?.evaluate("window.__syncPageProgress && window.__syncPageProgress($posSec);") {}
     }
 
     private fun maybeSyncQueue(s: PlaybackSnapshot) {
