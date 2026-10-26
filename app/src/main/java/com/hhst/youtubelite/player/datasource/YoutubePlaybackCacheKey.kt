@@ -17,8 +17,12 @@ import java.util.Base64
 object YoutubePlaybackCacheKey {
     fun of(format: Format): String {
         val identity = format.resourceIdentity
-        return if (identity.isNullOrBlank() || format.formatKey == null) "yt:unproven:" + MessageDigest.getInstance("SHA-256").digest(format.url.toByteArray()).joinToString("") { "%02x".format(it) }
-        else "yt:v3:" + Base64.getUrlEncoder().withoutPadding().encodeToString(identity.toByteArray())
+        return if (identity.isNullOrBlank() || format.formatKey == null) {
+            ofQuery(format.url.substringAfter('?', ""))
+                ?: ("yt:unproven:" + MessageDigest.getInstance("SHA-256").digest(format.url.toByteArray()).joinToString("") { "%02x".format(it) })
+        } else {
+            "yt:v3:" + Base64.getUrlEncoder().withoutPadding().encodeToString(identity.toByteArray())
+        }
     }
     private const val VERSION = 2
 

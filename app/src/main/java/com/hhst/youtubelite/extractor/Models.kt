@@ -154,3 +154,5 @@ class Extraction(
     val stream: Promise<Stream>,
     val chapters: Promise<ChapterList>,
 )
+
+internal fun ByteArray.hexString(): String = joinToString("") { "%02x".format(it) }
