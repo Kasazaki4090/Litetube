@@ -75,3 +75,7 @@ graph TD
   - **原生播放器 → 网页 `#movie_player` 观看进度实时回写 (`9d8aeb1` / `e21fbc6`)**：在 `player-hook.js` 中暴露 `window.__syncPageProgress(targetSec)`（带 `window.__liteSyncing` 防递归锁），并在 `PlayerViewModel.maybeSyncWebProgress()` 中于每 5 秒、暂停瞬间及播放结束时自动将进度同步至网页端播放器，确保 YouTube 账号跨端观看历史与红条进度实时更新。
   - **记住字幕语言开关与中文字幕跨变体智能匹配 (`e390cb0`)**：新增 `PreferenceKeys.REMEMBER_SUBTITLE_LANGUAGE` 设置项（默认开启）及多语言文案，并在 `SubtitleSelection.select()` 中支持简繁及地区代码（`zh-Hans`、`zh-CN`、`zh-Hant`、`zh-TW`、`zh-HK`、`zh-SG`、`zh-MO`、`zh`）跨变体回退匹配。
   - **WebView 深浅色主题实时同步 (`dc75ae6`)**：在 `WebViewFactory.syncTheme()` 与 `BrowserScreen` 中联动系统深浅色模式（配置 `WebSettingsCompat` 暗色策略、更新 `.youtube.com` 的 `PREF` Cookie `f6=400/10000` 并实时注入 DOM/CSS 变量与 `ytm-app.setTheme`），无需重启即可无缝切换网页深浅色外观。
+  - **Gradle 工具链与第三方依赖版本同步 (`bc792ec` / `0cde6a1`)**：
+    - `Gradle Wrapper` 升级至 `9.7.0`（同步 `gradle-wrapper.properties`、`gradle-wrapper.jar`、`gradlew`、`gradlew.bat`）。
+    - `AGP` 升级至 `9.4.0`（并在 `gradle.properties` 中同步 `android.builtInKotlin=false` 等 AGP 9 兼容配置）。
+    - 同步更新 `mmkv = "2.4.1"`（支持 16KB 页大小对齐）、`okhttp = "5.3.2"`、`okio = "3.16.4"`、`webkit = "1.15.0"`、`swiperefreshlayout = "1.2.0"`、`activityCompose = "1.13.0"`、`lifecycle = "2.10.0"`、`androidxTestExtJunit = "1.3.0"`，并清理已废弃的 `androidx-javascriptengine` 依赖。

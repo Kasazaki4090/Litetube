@@ -143,6 +143,7 @@ dependencies {
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
     implementation(libs.okhttp)
+    implementation(libs.okio)
     implementation(libs.gson)
     implementation(libs.mmkv)
     implementation(libs.newpipe.extractor) {
