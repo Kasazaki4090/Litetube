@@ -27,6 +27,8 @@
   // Per-video vote cache (the RYD API is IP-rate-limited); a failed fetch
   // leaves the count at zero rather than showing a stale number.
   const votesCache = new Map();
+  const inFlightFetches = new Set();
+  let retryTimerId = 0;
 
   function readEnabled() {
     return !!Lite.prefs().enable_display_dislikes;
@@ -62,7 +64,10 @@
     if (isMobile) {
       return (
         document.querySelector(".slim-video-action-bar-actions .segmented-buttons") ??
-        document.querySelector(".slim-video-action-bar-actions")
+        document.querySelector(".slim-video-action-bar-actions") ??
+        document.querySelector("ytm-slim-video-action-bar-renderer segmented-like-dislike-button-view-model") ??
+        document.querySelector("segmented-like-dislike-button-view-model") ??
+        document.querySelector("ytm-slim-video-action-bar-renderer")
       );
     }
 
@@ -84,6 +89,8 @@
       return document.querySelector("#segmented-like-button") ?? firstChild.children[0] ?? null;
     }
     if (isMobile && !isShorts()) return buttons.querySelector("like-button-view-model") ??
+      (buttons.matches?.("like-button-view-model") ? buttons : null) ??
+      document.querySelector("ytm-slim-video-action-bar-renderer like-button-view-model, segmented-like-dislike-button-view-model like-button-view-model") ??
       Array.from(buttons.querySelectorAll("ytm-toggle-button-renderer,ytm-slim-toggle-button-renderer")).filter(node => !node.closest('[data-injected]'))[0] ?? null;
     return buttons.querySelector("like-button-view-model") ?? firstChild;
   }
@@ -97,6 +104,8 @@
         return document.querySelector("#segmented-dislike-button") ?? firstChild.children[1] ?? null;
       }
       if (isMobile && !isShorts()) return buttons.querySelector("dislike-button-view-model") ??
+        (buttons.matches?.("dislike-button-view-model") ? buttons : null) ??
+        document.querySelector("ytm-slim-video-action-bar-renderer dislike-button-view-model, segmented-like-dislike-button-view-model dislike-button-view-model") ??
         Array.from(buttons.querySelectorAll("ytm-toggle-button-renderer,ytm-slim-toggle-button-renderer")).filter(node => !node.closest('[data-injected]'))[1] ?? null;
       return buttons.querySelector("dislike-button-view-model") ?? buttons.children[1] ?? null;
     } catch {
@@ -407,6 +416,9 @@
     const likeButton = getLikeButton();
     const dislikeButton = getDislikeButton();
     if (!likeButton || !dislikeButton) return false;
+    if (!likeButton.querySelector("button") || !dislikeButton.querySelector("button")) return false;
+
+    const changed = likeButton !== lastLikeButton || dislikeButton !== lastDislikeButton;
 
     if (likeButton !== lastLikeButton) {
       restoreCount(lastLikeButton?.querySelector('[data-lite-vote-count]'), null);
@@ -427,7 +439,9 @@
       dislikeButton.addEventListener("click", lastDislikeHandler);
       lastDislikeButton = dislikeButton;
     }
-    observeDislikeButton(dislikeButton);
+    if (changed || !activeDislikeObserver) {
+      observeDislikeButton(dislikeButton);
+    }
 
     return true;
   }
@@ -452,8 +466,8 @@
       attributes: true, attributeFilter: ['style', 'class'] });
   }
 
-  function fetchVotes(videoId, token) {
-    if (!anyEnabled()) return;
+  function fetchVotes(videoId, token, attempt = 0) {
+    if (!anyEnabled() || !videoId) return;
     const cached = votesCache.get(videoId);
     if (cached) {
       votesLoaded = true;
@@ -464,12 +478,16 @@
       applyLikeCount();
       return;
     }
-    // No stale counts next to the new video while the fetch is in flight.
-    likesValue = 0;
-    dislikesValue = 0;
-    votesLoaded = false;
-    clearDislikeCount();
-    clearLikeCount();
+    if (inFlightFetches.has(videoId)) return;
+    if (attempt === 0) {
+      // No stale counts next to the new video while the fetch is in flight.
+      likesValue = 0;
+      dislikesValue = 0;
+      votesLoaded = false;
+      clearDislikeCount();
+      clearLikeCount();
+    }
+    inFlightFetches.add(videoId);
     // Bounded so a hung RYD request cannot leave stale zeros forever.
     const options = typeof AbortSignal !== "undefined" &&
       typeof AbortSignal.timeout === "function"
@@ -481,19 +499,33 @@
     )
       .then((response) => (response.ok ? response.json() : null))
       .then((json) => {
-        if (!anyEnabled() || !json || token !== initToken || videoId !== activeVideoId) return;
-        likesValue = json.likes ?? 0;
-        dislikesValue = json.dislikes ?? 0;
-        votesLoaded = true;
+        inFlightFetches.delete(videoId);
+        if (!json) {
+          if (anyEnabled() && videoId === activeVideoId && attempt < 2) {
+            setTimeout(() => fetchVotes(videoId, token, attempt + 1), 1200 * (attempt + 1));
+          }
+          return;
+        }
+        const fetchedLikes = json.likes ?? 0;
+        const fetchedDislikes = json.dislikes ?? 0;
         if (votesCache.size >= 64) {
           votesCache.delete(votesCache.keys().next().value);
         }
-        votesCache.set(videoId, { likes: likesValue, dislikes: dislikesValue });
+        votesCache.set(videoId, { likes: fetchedLikes, dislikes: fetchedDislikes });
+        if (!anyEnabled() || videoId !== activeVideoId) return;
+        likesValue = fetchedLikes;
+        dislikesValue = fetchedDislikes;
+        votesLoaded = true;
+        bindButtons();
         previousState = readVoteState();
         scheduleApplyDislikeCount();
         applyLikeCount();
       })
       .catch(() => {
+        inFlightFetches.delete(videoId);
+        if (anyEnabled() && videoId === activeVideoId && attempt < 2) {
+          setTimeout(() => fetchVotes(videoId, token, attempt + 1), 1200 * (attempt + 1));
+        }
       });
   }
 
@@ -516,11 +548,16 @@
 
   function resetState() {
     initToken += 1;
+    if (retryTimerId) {
+      clearTimeout(retryTimerId);
+      retryTimerId = 0;
+    }
     likesValue = 0;
     dislikesValue = 0;
     votesLoaded = false;
     previousState = STATE_NEUTRAL;
     activeVideoId = null;
+    inFlightFetches.clear();
     resetBindings();
     if (applyFrameId) {
       cancelAnimationFrame(applyFrameId);
@@ -531,6 +568,7 @@
   }
 
   function tryInitialize(token, retriesLeft) {
+    retryTimerId = 0;
     if (!anyEnabled() || token !== initToken) return;
 
     const videoId = getVideoId();
@@ -538,21 +576,31 @@
       activeVideoId = null;
       resetBindings();
       clearDislikeCount();
+      clearLikeCount();
       return;
+    }
+
+    activeVideoId = videoId;
+    if (!votesLoaded) {
+      fetchVotes(videoId, token);
     }
 
     if (!isVideoReady() || !bindButtons()) {
       if (retriesLeft > 0) {
-        setTimeout(() => tryInitialize(token, retriesLeft - 1), 120);
+        retryTimerId = setTimeout(() => tryInitialize(token, retriesLeft - 1), 120);
       } else {
         armLateRetry(token);
       }
       return;
     }
 
-    activeVideoId = videoId;
     previousState = readVoteState();
-    fetchVotes(videoId, token);
+    if (votesLoaded) {
+      scheduleApplyDislikeCount();
+      applyLikeCount();
+    } else {
+      fetchVotes(videoId, token);
+    }
   }
 
   // A video whose action bar renders after the retry window would never
@@ -578,13 +626,39 @@
 
   function scheduleInitialize() {
     if (!anyEnabled()) return;
-    // Refresh owned counts when the page hydrates the bound renderers.
-    if (getVideoId() === activeVideoId && lastLikeButton?.isConnected && lastDislikeButton?.isConnected &&
-        lastLikeButton === getLikeButton() && lastDislikeButton === getDislikeButton()) {
-      scheduleApplyDislikeCount();
+    const videoId = getVideoId();
+    if (!videoId) {
+      if (activeVideoId !== null) {
+        activeVideoId = null;
+        resetBindings();
+        clearDislikeCount();
+        clearLikeCount();
+      }
+      return;
+    }
+    // Same video: keep in-flight fetch and loaded counts intact; re-bind if
+    // hydration replaced the button elements and refresh owned count nodes.
+    if (videoId === activeVideoId) {
+      if (!votesLoaded) {
+        fetchVotes(videoId, initToken);
+      }
+      if (isVideoReady() && bindButtons()) {
+        if (votesLoaded) {
+          scheduleApplyDislikeCount();
+          applyLikeCount();
+        }
+      } else if (!retryTimerId) {
+        const token = initToken;
+        retryTimerId = setTimeout(() => tryInitialize(token, 25), 120);
+      }
       return;
     }
     initToken += 1;
+    if (retryTimerId) {
+      clearTimeout(retryTimerId);
+      retryTimerId = 0;
+    }
+    activeVideoId = videoId;
     // New video: no stale counts from the previous one.
     likesValue = 0;
     dislikesValue = 0;
@@ -592,8 +666,9 @@
     clearDislikeCount();
     clearLikeCount();
     resetBindings();
+    fetchVotes(videoId, initToken);
     const token = initToken;
-    setTimeout(() => tryInitialize(token, 25), 0);
+    retryTimerId = setTimeout(() => tryInitialize(token, 25), 0);
   }
 
   // One of two independent history.pushState/replaceState wrappers (nav.js

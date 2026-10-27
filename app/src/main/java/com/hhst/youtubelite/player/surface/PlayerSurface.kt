@@ -1,5 +1,6 @@
 package com.hhst.youtubelite.player.surface
 
+import android.os.Build
 import android.view.Gravity
 import android.view.SurfaceView
 import android.widget.FrameLayout
@@ -10,8 +11,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.absoluteOffset
@@ -21,7 +24,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -78,6 +84,7 @@ private const val SEEK_ARC_HIDE_MS = 500L
  * time bar and the position text, so ticks never recompose the rest of the
  * surface (sheets, dialogs, menus, subtitle layout, gesture overlays).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @UnstableApi
 @Composable
 fun PlayerSurface(
@@ -112,19 +119,59 @@ fun PlayerSurface(
         state.fullscreen -> "fullscreen"
         else -> "local"
     }
+    val view = LocalView.current
     val density = LocalDensity.current
     val layoutDir = LocalLayoutDirection.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val embeddedBounds = PlayerUi.embeddedBounds(state, screenWidthDp)
     val embeddedHeightDp = embeddedBounds.height
+    val rootInsets = ViewCompat.getRootWindowInsets(view)
+        ?.getInsetsIgnoringVisibility(
+            WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.systemBars(),
+        )
+    val nativeCutout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        view.rootWindowInsets?.displayCutout
+    } else {
+        null
+    }
     val leftInsetDp = with(density) {
-        WindowInsets.safeDrawing.getLeft(this, layoutDir).toDp().value.toInt()
+        val composePx = maxOf(
+            WindowInsets.safeDrawing.getLeft(this, layoutDir),
+            WindowInsets.displayCutout.getLeft(this, layoutDir),
+            if (state.fullscreen) WindowInsets.systemBarsIgnoringVisibility.getLeft(this, layoutDir) else 0,
+        )
+        val viewPx = if (state.fullscreen) {
+            maxOf(rootInsets?.left ?: 0, nativeCutout?.safeInsetLeft ?: 0)
+        } else {
+            0
+        }
+        maxOf(composePx, viewPx).toDp().value.toInt()
     }
     val rightInsetDp = with(density) {
-        WindowInsets.safeDrawing.getRight(this, layoutDir).toDp().value.toInt()
+        val composePx = maxOf(
+            WindowInsets.safeDrawing.getRight(this, layoutDir),
+            WindowInsets.displayCutout.getRight(this, layoutDir),
+            if (state.fullscreen) WindowInsets.systemBarsIgnoringVisibility.getRight(this, layoutDir) else 0,
+        )
+        val viewPx = if (state.fullscreen) {
+            maxOf(rootInsets?.right ?: 0, nativeCutout?.safeInsetRight ?: 0)
+        } else {
+            0
+        }
+        maxOf(composePx, viewPx).toDp().value.toInt()
     }
     val topInsetDp = with(density) {
-        WindowInsets.safeDrawing.getTop(this).toDp().value.toInt()
+        val composePx = maxOf(
+            WindowInsets.safeDrawing.getTop(this),
+            WindowInsets.displayCutout.getTop(this),
+            if (state.fullscreen) WindowInsets.systemBarsIgnoringVisibility.getTop(this) else 0,
+        )
+        val viewPx = if (state.fullscreen) {
+            maxOf(rootInsets?.top ?: 0, nativeCutout?.safeInsetTop ?: 0)
+        } else {
+            0
+        }
+        maxOf(composePx, viewPx).toDp().value.toInt()
     }
     // Embedded top in window space = WebView's inset top + the page player's
     // viewport-relative top (player-hook.js reports it): this overlay is a
@@ -213,7 +260,6 @@ fun PlayerSurface(
         }
     }
 
-    val view = LocalView.current
     DisposableEffect(state.isPlaying, state.loading, state.casting) {
         view.keepScreenOn = !state.casting && (state.isPlaying || state.loading)
         onDispose { view.keepScreenOn = false }
@@ -476,13 +522,14 @@ fun PlayerSurface(
                     }
 
                     if (PlayerUi.lockVisible(state.fullscreen, state.mini, state.locked, state.controlsVisible) && !pip) {
+                        val lockStartPadDp = maxOf(16, 44 - chromeLeft)
                         LockAffordance(
                             locked = state.locked,
                             onToggle = callbacks::onLockToggle,
                             iconSize = chromeSizing.iconDp,
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
-                                .padding(start = 8.dp),
+                                .padding(start = lockStartPadDp.dp),
                         )
                     }
                     if (zoom.zoomed && state.fullscreen && !pip && !state.locked) {

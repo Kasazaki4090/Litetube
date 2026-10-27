@@ -1,4 +1,8 @@
 (function() {
+  if (typeof window.__liteSubscribeScan === 'function') {
+    window.__liteSubscribeScan();
+    return;
+  }
   if (window.__liteSubscribeBtn) return;
   window.__liteSubscribeBtn = true;
 
@@ -74,7 +78,7 @@
 
   function getOwnerContainers() {
     return document.querySelectorAll(
-      'ytm-video-owner-renderer, ytm-slim-owner-renderer, [class*="video-owner"], [class*="slim-owner"]'
+      'ytm-video-owner-renderer, ytm-slim-owner-renderer, [class*="video-owner"], [class*="slim-owner"], ytm-channel-item-renderer, ytm-compact-channel-renderer, .subscription-item'
     );
   }
 
@@ -85,6 +89,8 @@
       fixOwnerSection(owners[i]);
     }
   }
+
+  window.__liteSubscribeScan = scan;
 
   var scheduled = false;
   function schedule() {
@@ -97,13 +103,30 @@
   }
 
   var observer = new MutationObserver(schedule);
-  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  function observeRoot() {
+    var root = document.documentElement || document.body;
+    if (root) {
+      observer.observe(root, { childList: true, subtree: true, characterData: true });
+    }
+  }
+  observeRoot();
+
+  if (window.Lite && typeof window.Lite.module === 'function') {
+    window.Lite.module('subscribe_button', function() {
+      schedule();
+      return true;
+    });
+  }
 
   window.addEventListener('yt-navigate-finish', schedule, true);
   window.addEventListener('yt-page-data-updated', schedule, true);
+  window.addEventListener('popstate', schedule, true);
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     scan();
   } else {
-    window.addEventListener('DOMContentLoaded', scan);
+    window.addEventListener('DOMContentLoaded', function() {
+      observeRoot();
+      scan();
+    });
   }
 })();

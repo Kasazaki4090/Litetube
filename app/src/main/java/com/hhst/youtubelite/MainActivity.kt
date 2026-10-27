@@ -19,6 +19,7 @@ import android.os.PowerManager
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Rational
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -129,6 +130,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
         PipAutoEnter.register(this)
         ContextCompat.registerReceiver(this, pipActionsReceiver,
             IntentFilter().apply {

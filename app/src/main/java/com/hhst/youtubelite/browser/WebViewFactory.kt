@@ -420,6 +420,7 @@ private class BrowserWebViewClient(
         }
         if (UrlPolicy.shouldInject(url) && hasDocumentStartScript) {
             injector.inject(view)
+            dislikes.inject(appContext, view)
             subscribeButton.inject(appContext, view)
             downloadBridge.stamp(view)
             downloadScript.inject(appContext, view)
@@ -439,6 +440,7 @@ private class BrowserWebViewClient(
         updateRefreshEnabled(url)
         if (UrlPolicy.shouldInject(url)) {
             injector.inject(view)
+            dislikes.inject(appContext, view)
             subscribeButton.inject(appContext, view)
             downloadBridge.bumpPage()
             downloadBridge.stamp(view)
