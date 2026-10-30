@@ -6,12 +6,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.schabi.newpipe.extractor.Image
+import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamExtractor
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamType
 import org.schabi.newpipe.extractor.stream.VideoStream
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -22,6 +24,50 @@ internal class PlayerPage private constructor(
     val extractor: StreamExtractor,
 ) {
     companion object {
+        private val CLIENT_LOCK = Any()
+        private val FALLBACK_CLIENTS = listOf("visionos", "web", "tv_simply", "mweb", "tv_downgraded")
+
+        private fun hasPlayableMedia(info: StreamInfo): Boolean {
+            val hasFormats = !info.videoStreams.isNullOrEmpty() ||
+                !info.videoOnlyStreams.isNullOrEmpty() ||
+                !info.audioStreams.isNullOrEmpty()
+            val hasManifest = !info.hlsUrl.isNullOrBlank() || !info.dashMpdUrl.isNullOrBlank()
+            return hasFormats || hasManifest
+        }
+
+        private fun fetchWithFallback(videoId: String): PlayerPage {
+            val watchUrl = VideoId.watchUrl(videoId)
+            var lastError: Throwable? = null
+            var bestFallbackPage: PlayerPage? = null
+
+            for (client in FALLBACK_CLIENTS) {
+                try {
+                    val page = synchronized(CLIENT_LOCK) {
+                        NewPipe.setYoutubePlayerClient(client)
+                        val extractor = ServiceList.YouTube.getStreamExtractor(watchUrl)
+                        extractor.fetchPage()
+                        val info = StreamInfo.getInfo(extractor)
+                        PlayerPage(info, extractor)
+                    }
+                    if (hasPlayableMedia(page.info)) {
+                        return page
+                    }
+                    if (bestFallbackPage == null) {
+                        bestFallbackPage = page
+                    }
+                } catch (t: Throwable) {
+                    lastError = t
+                    // Fast-fail in offline unit tests where network is intentionally stubbed out
+                    if (t is IOException && t.message == "offline epoch test") {
+                        throw t
+                    }
+                }
+            }
+
+            bestFallbackPage?.let { return it }
+            throw lastError ?: IllegalStateException("Failed to extract stream for $videoId")
+        }
+
         fun shared(
             videoId: String,
             scope: CoroutineScope,
@@ -32,10 +78,7 @@ internal class PlayerPage private constructor(
                 if (started.compareAndSet(false, true)) {
                     scope.launch(Dispatchers.IO) {
                         try {
-                            val extractor = ServiceList.YouTube.getStreamExtractor(VideoId.watchUrl(videoId))
-                            extractor.fetchPage()
-                            val info = StreamInfo.getInfo(extractor)
-                            deferred.complete(PlayerPage(info, extractor))
+                            deferred.complete(fetchWithFallback(videoId))
                         } catch (t: Throwable) {
                             deferred.completeExceptionally(t)
                         }

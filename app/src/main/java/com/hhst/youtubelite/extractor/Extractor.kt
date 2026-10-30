@@ -1,6 +1,9 @@
 package com.hhst.youtubelite.extractor
 
+import android.annotation.SuppressLint
+import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import com.grack.nanojson.JsonParser
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
@@ -30,12 +33,42 @@ class Extractor(
         NewPipe.setYoutubePlayerClient("visionos")
     }
 
-    fun installBrowserCapture(view: WebView, generation: () -> Long) = Unit
+    @SuppressLint("JavascriptInterface")
+    fun installBrowserCapture(view: WebView, generation: () -> Long) {
+        runCatching {
+            view.addJavascriptInterface(
+                object {
+                    @JavascriptInterface
+                    fun postMessage(payload: String?) {
+                        if (payload.isNullOrBlank()) return
+                        runCatching {
+                            generation()
+                            val root = JsonParser.`object`().from(payload)
+                            val config = root.getObject("configuration") ?: return
+                            val visitorData = config.getString("VISITOR_DATA", null)
+                            val dataSyncId = config.getString("DATASYNC_ID", null)
+                            val sessionIndex = config.getString("SESSION_INDEX", null)
+                            val loggedIn = config.getBoolean("LOGGED_IN", false)
+                            AuthContextStore.updateFromBrowser(
+                                visitorData = visitorData,
+                                dataSyncId = dataSyncId,
+                                sessionIndex = sessionIndex,
+                                loggedIn = loggedIn,
+                            )
+                        }
+                    }
+                },
+                "NativePlayerCapture"
+            )
+        }
+    }
+
     fun initialize(): Boolean = true
-    fun sessionStamp(): String = ""
-    fun recoveryScope(): String = ""
+    fun sessionStamp(): String = AuthContextStore.visitorData.orEmpty()
+    fun recoveryScope(): String = if (AuthContextStore.hasAuthCookies()) "authenticated" else "anonymous"
     fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext? = null): ClientProfile? = null
-    fun extractionDiagnostics(): String = "PipePipeExtractor Engine (visionos client)"
+    fun extractionDiagnostics(): String =
+        "PipePipeExtractor Engine (client=${NewPipe.getYoutubePlayerClient()}, auth=${AuthContextStore.hasAuthCookies()})"
 
     /**
      * Starts extraction for [urlOrId]. Reuses an in-flight [Extraction] for the same id.
