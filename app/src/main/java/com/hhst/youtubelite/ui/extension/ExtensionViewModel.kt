@@ -23,6 +23,7 @@ class ExtensionViewModel(
             sections = sections,
             expanded = emptySet(),
             toggles = snapshotToggles(sections),
+            choices = snapshotChoices(sections),
             hapticStrength = manager.hapticStrength(),
         ),
     )
@@ -30,7 +31,11 @@ class ExtensionViewModel(
 
     private val preferenceListener: (String) -> Unit = {
         _uiState.update { state ->
-            state.copy(toggles = snapshotToggles(sections), hapticStrength = manager.hapticStrength())
+            state.copy(
+                toggles = snapshotToggles(sections),
+                choices = snapshotChoices(sections),
+                hapticStrength = manager.hapticStrength(),
+            )
         }
     }
 
@@ -59,6 +64,10 @@ class ExtensionViewModel(
         manager.setEnabled(key, enabled)
     }
 
+    fun setString(key: String, value: String) {
+        manager.setString(key, value)
+    }
+
     fun resetToDefault() {
         manager.resetToDefault()
     }
@@ -82,11 +91,28 @@ class ExtensionViewModel(
         walk(nodes)
         return out
     }
+
+    private fun snapshotChoices(nodes: List<Extension>): Map<String, String> {
+        val out = linkedMapOf<String, String>()
+        fun walk(list: List<Extension>) {
+            for (node in list) {
+                val key = node.key
+                if (key != null && node.kind == ExtensionKind.CHOICE) {
+                    out[key] = manager.getString(key, "auto")
+                } else {
+                    walk(node.children)
+                }
+            }
+        }
+        walk(nodes)
+        return out
+    }
 }
 
 data class ExtensionUiState(
     val sections: List<Extension>,
     val expanded: Set<String>,
     val toggles: Map<String, Boolean>,
+    val choices: Map<String, String> = emptyMap(),
     val hapticStrength: Int = 30,
 )

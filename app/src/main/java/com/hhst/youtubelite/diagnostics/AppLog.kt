@@ -72,6 +72,16 @@ object AppLog {
     fun event(category: Category, event: String, fields: Map<String, Any?> = emptyMap(),
         failure: Throwable? = null, critical: Boolean = failure != null, context: DiagnosticContext? = null,
         level: DiagnosticLevel = if (critical) DiagnosticLevel.ERROR else DiagnosticLevel.INFO) {
+        if (BuildConfig.DEBUG) {
+            runCatching {
+                val msg = "$event $fields" + (failure?.let { " | ${it.javaClass.simpleName}: ${it.message}" } ?: "")
+                if (critical || level == DiagnosticLevel.ERROR || level == DiagnosticLevel.FATAL) {
+                    android.util.Log.e("LiTube_${category.name}", msg, failure)
+                } else {
+                    android.util.Log.d("LiTube_${category.name}", msg)
+                }
+            }
+        }
         runCatching { recorder?.record(category.name, event, level, context, fields, failure, incident = critical) }
     }
     @JvmStatic @JvmOverloads

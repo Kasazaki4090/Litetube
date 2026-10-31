@@ -9,6 +9,8 @@ interface PrefStore {
     fun putBool(key: String, value: Boolean)
     fun getLong(key: String, default: Long): Long
     fun putLong(key: String, value: Long)
+    fun getString(key: String, default: String): String
+    fun putString(key: String, value: String)
 }
 
 class MmkvPrefStore(private val kv: MMKV) : PrefStore {
@@ -25,6 +27,13 @@ class MmkvPrefStore(private val kv: MMKV) : PrefStore {
         kv.decodeLong(key, default)
 
     override fun putLong(key: String, value: Long) {
+        kv.encode(key, value)
+    }
+
+    override fun getString(key: String, default: String): String =
+        kv.decodeString(key, default) ?: default
+
+    override fun putString(key: String, value: String) {
         kv.encode(key, value)
     }
 }

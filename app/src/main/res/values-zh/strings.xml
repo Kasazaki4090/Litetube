@@ -41,6 +41,7 @@
     <string name="remember_playback_speed">记住播放速度</string>
     <string name="remember_resize_mode">记住缩放模式</string>
     <string name="remember_subtitle_language">记住上次选中的字幕语言</string>
+    <string name="preferred_subtitle_language">默认字幕语言</string>
     <string name="use_original_title">使用原标题</string>
     <string name="reset_all_settings">重置所有设置</string>
     <string name="reset_extension_title">重置扩展</string>

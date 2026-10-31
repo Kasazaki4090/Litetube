@@ -51,10 +51,30 @@ class ExtensionManager(private val store: PrefStore) {
         }
     }
 
+    fun getString(key: String, default: String = "auto"): String {
+        val pref = prefKey(key)
+        return store.getString(pref, default)
+    }
+
+    fun setString(key: String, value: String) {
+        val pref = prefKey(key)
+        val previous = if (store.contains(pref)) store.getString(pref, "") else ""
+        store.putString(pref, value)
+        if (previous != value) {
+            AppLog.event(AppLog.Category.EXTENSION, "preference_changed", mapOf("key" to key, "before" to previous, "after" to value))
+            bumpVersion()
+            notifyChanged(key)
+        }
+    }
+
     fun resetToDefault() {
         val changedKeys = mutableListOf<String>()
         if (hapticStrength() != 30) changedKeys += PreferenceKeys.HAPTIC_STRENGTH
         store.putLong(prefKey(PreferenceKeys.HAPTIC_STRENGTH), 30L)
+        if (getString(PreferenceKeys.PREFERRED_SUBTITLE_LANGUAGE, "auto") != "auto") {
+            changedKeys += PreferenceKeys.PREFERRED_SUBTITLE_LANGUAGE
+            store.putString(prefKey(PreferenceKeys.PREFERRED_SUBTITLE_LANGUAGE), "auto")
+        }
         for ((key, value) in PreferenceKeys.DEFAULTS) {
             val pref = prefKey(key)
             if (!store.contains(pref) || store.getBool(pref, value) != value) {

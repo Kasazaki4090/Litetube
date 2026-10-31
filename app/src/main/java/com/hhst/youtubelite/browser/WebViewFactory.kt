@@ -102,51 +102,135 @@ object WebViewFactory {
                     prefValue.replace(Regex("f6=[0-9a-fA-F]+"), f6Val)
                 else -> "$prefValue&$f6Val"
             }
-            if (newPref != prefValue) {
-                cookieManager.setCookie(
-                    ".youtube.com",
-                    "PREF=$newPref; Domain=.youtube.com; Path=/; Secure; SameSite=None",
-                )
-                persistCookies()
-            }
+            cookieManager.setCookie(
+                "https://www.youtube.com",
+                "PREF=$newPref; Domain=.youtube.com; Path=/; Secure; SameSite=None",
+            )
+            cookieManager.setCookie(
+                "https://m.youtube.com",
+                "PREF=$newPref; Domain=.youtube.com; Path=/; Secure; SameSite=None",
+            )
+            persistCookies()
         }
         val currentUrl = webView.url
         if (!currentUrl.isNullOrBlank()) {
             webView.setBackgroundColor(if (PageKind.isShorts(currentUrl) || isDark) Color.BLACK else Color.WHITE)
         }
         if (UrlPolicy.shouldInject(currentUrl)) {
-            val js = "(function(isDark) {" +
-                "var html = document.documentElement;" +
-                "if (!html) return;" +
-                "html.style.colorScheme = isDark ? 'dark' : 'light';" +
-                "if (isDark) {" +
-                "  html.setAttribute('dark', 'true');" +
-                "  if (document.body) document.body.setAttribute('dark', 'true');" +
-                "  html.style.backgroundColor = '#0f0f0f';" +
-                "  if (document.body) document.body.style.backgroundColor = '#0f0f0f';" +
-                "  html.style.setProperty('--yt-spec-base-background', '#0f0f0f');" +
-                "  html.style.setProperty('--yt-spec-raised-background', '#212121');" +
-                "  html.style.setProperty('--yt-spec-menu-background', '#282828');" +
-                "  html.style.setProperty('--yt-spec-text-primary', '#f1f1f1');" +
-                "  html.style.setProperty('--yt-spec-text-secondary', '#aaaaaa');" +
-                "  html.style.setProperty('--yt-spec-10-percent-layer', 'rgba(255, 255, 255, 0.1)');" +
-                "} else {" +
-                "  html.removeAttribute('dark');" +
-                "  if (document.body) document.body.removeAttribute('dark');" +
-                "  html.style.backgroundColor = '#ffffff';" +
-                "  if (document.body) document.body.style.backgroundColor = '#ffffff';" +
-                "  html.style.setProperty('--yt-spec-base-background', '#ffffff');" +
-                "  html.style.setProperty('--yt-spec-raised-background', '#ffffff');" +
-                "  html.style.setProperty('--yt-spec-menu-background', '#ffffff');" +
-                "  html.style.setProperty('--yt-spec-text-primary', '#0f0f0f');" +
-                "  html.style.setProperty('--yt-spec-text-secondary', '#606060');" +
-                "  html.style.setProperty('--yt-spec-10-percent-layer', 'rgba(0, 0, 0, 0.1)');" +
-                "}" +
-                "var app = document.querySelector('ytm-app');" +
-                "if (app && typeof app.setTheme === 'function') {" +
-                "  try { app.setTheme(isDark ? 'DARK' : 'LIGHT'); } catch(e) {}" +
-                "}" +
-                "})($isDark);"
+            val js = """
+                (function(dark) {
+                  var doc = document.documentElement;
+                  if (!doc) return;
+                  doc.style.colorScheme = dark ? 'dark' : 'light';
+                  if (dark) {
+                    doc.setAttribute('dark', 'true');
+                    doc.classList.add('dark');
+                    if (document.body) {
+                      document.body.setAttribute('dark', 'true');
+                      document.body.classList.add('dark');
+                    }
+                    document.querySelectorAll('[dark]').forEach(function(el) { el.setAttribute('dark', 'true'); });
+                  } else {
+                    doc.removeAttribute('dark');
+                    doc.classList.remove('dark');
+                    if (document.body) {
+                      document.body.removeAttribute('dark');
+                      document.body.classList.remove('dark');
+                    }
+                    document.querySelectorAll('[dark]').forEach(function(el) { el.removeAttribute('dark'); });
+                    document.querySelectorAll('.dark').forEach(function(el) { el.classList.remove('dark'); });
+                  }
+                  if (!dark) {
+                    doc.style.backgroundColor = '#ffffff';
+                    if (document.body) document.body.style.backgroundColor = '#ffffff';
+                  } else {
+                    doc.style.backgroundColor = '#0f0f0f';
+                    if (document.body) document.body.style.backgroundColor = '#0f0f0f';
+                  }
+                  try {
+                    var data = JSON.parse(localStorage.getItem('yt-player-sticky-settings') || '{}');
+                    if (data.values) {
+                      data.values.dark = dark;
+                      localStorage.setItem('yt-player-sticky-settings', JSON.stringify(data));
+                    }
+                  } catch(e) {}
+                  var styles = dark ? {
+                    '--yt-spec-text-primary': '#ffffff',
+                    '--yt-spec-text-secondary': '#aaaaaa',
+                    '--yt-spec-icon-inactive': '#ffffff',
+                    '--yt-spec-icon-active-other': '#ffffff',
+                    '--yt-spec-icon-disabled': '#717171',
+                    '--yt-spec-wordmark-text': '#ffffff',
+                    '--yt-spec-general-background-a': '#0f0f0f',
+                    '--yt-spec-brand-background-solid': '#0f0f0f',
+                    '--yt-spec-raised-background': '#212121',
+                    '--yt-spec-menu-background': '#282828',
+                    '--yt-spec-base-background': '#0f0f0f',
+                    '--yt-spec-10-percent-layer': 'rgba(255, 255, 255, 0.1)',
+                    '--yt-spec-static-brand-white': '#ffffff'
+                  } : {
+                    '--yt-spec-text-primary': '#030303',
+                    '--yt-spec-text-secondary': '#606060',
+                    '--yt-spec-icon-inactive': '#030303',
+                    '--yt-spec-icon-active-other': '#030303',
+                    '--yt-spec-icon-disabled': '#909090',
+                    '--yt-spec-wordmark-text': '#030303',
+                    '--yt-spec-general-background-a': '#ffffff',
+                    '--yt-spec-brand-background-solid': '#ffffff',
+                    '--yt-spec-raised-background': '#f9f9f9',
+                    '--yt-spec-menu-background': '#ffffff',
+                    '--yt-spec-base-background': '#ffffff',
+                    '--yt-spec-10-percent-layer': 'rgba(0, 0, 0, 0.1)',
+                    '--yt-spec-static-brand-white': '#ffffff'
+                  };
+                  for (var prop in styles) {
+                    if (Object.prototype.hasOwnProperty.call(styles, prop)) {
+                      doc.style.setProperty(prop, styles[prop], 'important');
+                      if (document.body) document.body.style.setProperty(prop, styles[prop], 'important');
+                    }
+                  }
+                  var fixTag = document.getElementById('litube-theme-fix');
+                  if (!fixTag) {
+                    fixTag = document.createElement('style');
+                    fixTag.id = 'litube-theme-fix';
+                    (document.head || doc).appendChild(fixTag);
+                  }
+                  fixTag.textContent = dark ? '' :
+                    'html:not([dark]) ytm-mobile-topbar-renderer, ' +
+                    'html:not([dark]) ytm-mobile-topbar, ' +
+                    'html:not([dark]) ytm-mobile-app-bar, ' +
+                    'html:not([dark]) #masthead, ' +
+                    'html:not([dark]) .mobile-topbar-header { ' +
+                    'background-color: #ffffff !important; background: #ffffff !important; } ' +
+                    'html:not([dark]) ytm-mobile-topbar-renderer .topbar-icons button, ' +
+                    'html:not([dark]) ytm-mobile-topbar-renderer .topbar-icons a, ' +
+                    'html:not([dark]) ytm-mobile-topbar-renderer .topbar-icons yt-icon, ' +
+                    'html:not([dark]) ytm-mobile-topbar-renderer .topbar-icons c3-icon, ' +
+                    'html:not([dark]) ytm-mobile-topbar-renderer .topbar-icons span { ' +
+                    'color: #030303 !important; fill: currentColor !important; } ' +
+                    'html:not([dark]) ytm-mobile-topbar-renderer button:not(ytm-home-logo *) { ' +
+                    'color: #030303 !important; } ' +
+                    'html:not([dark]) ytm-mobile-topbar-renderer button:not(ytm-home-logo *) svg { ' +
+                    'fill: currentColor !important; } ' +
+                    'html:not([dark]) ytm-home-logo, ' +
+                    'html:not([dark]) ytm-home-logo * { ' +
+                    'color: #030303 !important; } ' +
+                    'html:not([dark]) ytm-home-logo [fill="currentColor"], ' +
+                    'html:not([dark]) ytm-home-logo g[fill="currentColor"] { ' +
+                    'fill: #030303 !important; } ' +
+                    'html:not([dark]) ytm-home-logo svg path:not(#rectangle):not([fill*="#FF00"]):not([fill*="#ff00"]):not([fill="#f00"]):not([fill="#F00"]) { ' +
+                    'fill: #030303 !important; } ' +
+                    'html:not([dark]) ytm-home-logo svg polygon { ' +
+                    'fill: #ffffff !important; }';
+                  var chatBox = document.getElementById('live_chat_container');
+                  if (chatBox) chatBox.style.backgroundColor = dark ? '#0f0f0f' : '#ffffff';
+                  var app = document.querySelector('ytm-app');
+                  if (app && typeof app.setTheme === 'function') {
+                    try { app.setTheme(dark ? 'DARK' : 'LIGHT'); } catch(e) {}
+                  }
+                  window.dispatchEvent(new Event('resize'));
+                })($isDark);
+            """.trimIndent()
             webView.evaluateJavascript(js, null)
         }
     }

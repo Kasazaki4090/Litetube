@@ -16,6 +16,8 @@ import org.schabi.newpipe.extractor.stream.VideoStream
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
+internal val forbiddenProfilesByVideo = java.util.concurrent.ConcurrentHashMap<String, MutableSet<org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile>>()
+
 /**
  * Shared stream and metadata extractor instance powered by PipePipeExtractor.
  */
@@ -25,7 +27,18 @@ internal class PlayerPage private constructor(
 ) {
     companion object {
         private val CLIENT_LOCK = Any()
-        private val FALLBACK_CLIENTS = listOf("visionos", "web", "tv_simply", "mweb", "tv_downgraded")
+        private val FALLBACK_CLIENTS = listOf("mweb", "tv_simply", "tv_downgraded", "tv_samsung", "visionos")
+        private val AUTH_FALLBACK_CLIENTS = listOf("mweb", "tv_simply", "tv_downgraded", "tv_samsung", "visionos")
+
+        private fun setPlayerClient(client: String) {
+            runCatching {
+                val field = NewPipe::class.java.getDeclaredField("youtubePlayerClient")
+                field.isAccessible = true
+                field.set(null, client)
+            }.onFailure {
+                NewPipe.setYoutubePlayerClient(client)
+            }
+        }
 
         private fun hasPlayableMedia(info: StreamInfo): Boolean {
             val hasFormats = !info.videoStreams.isNullOrEmpty() ||
@@ -40,16 +53,54 @@ internal class PlayerPage private constructor(
             var lastError: Throwable? = null
             var bestFallbackPage: PlayerPage? = null
 
-            for (client in FALLBACK_CLIENTS) {
+            var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
+            if (browserResponse == null && AuthContextStore.hasAuthCookies()) {
+                val start = System.currentTimeMillis()
+                while (browserResponse == null && System.currentTimeMillis() - start < 500L) {
+                    try {
+                        Thread.sleep(50)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                    browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
+                }
+            }
+
+            val clients = if (browserResponse != null || AuthContextStore.hasAuthCookies()) {
+                AUTH_FALLBACK_CLIENTS
+            } else {
+                FALLBACK_CLIENTS
+            }
+
+            for (client in clients) {
+                val profile = when (client) {
+                    "visionos" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS
+                    "tv_downgraded", "tv_samsung", "tv_simply" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5
+                    "mweb" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB
+                    else -> null
+                }
+                if (profile != null && forbiddenProfilesByVideo[videoId]?.contains(profile) == true) {
+                    if (client == "mweb" && AuthContextStore.getBrowserPlayerResponse(videoId) != null) {
+                        forbiddenProfilesByVideo[videoId]?.remove(profile)
+                    } else {
+                        continue
+                    }
+                }
                 try {
                     val page = synchronized(CLIENT_LOCK) {
-                        NewPipe.setYoutubePlayerClient(client)
+                        setPlayerClient(client)
                         val extractor = ServiceList.YouTube.getStreamExtractor(watchUrl)
                         extractor.fetchPage()
                         val info = StreamInfo.getInfo(extractor)
                         PlayerPage(info, extractor)
                     }
-                    if (hasPlayableMedia(page.info)) {
+                    val playable = hasPlayableMedia(page.info)
+                    android.util.Log.i(
+                        "LiTube_RESOLVE",
+                        "client=$client videoId=$videoId playable=$playable " +
+                            "video=${page.info.videoStreams?.size} videoOnly=${page.info.videoOnlyStreams?.size} audio=${page.info.audioStreams?.size}",
+                    )
+                    if (playable) {
                         return page
                     }
                     if (bestFallbackPage == null) {
@@ -57,6 +108,10 @@ internal class PlayerPage private constructor(
                     }
                 } catch (t: Throwable) {
                     lastError = t
+                    android.util.Log.w(
+                        "LiTube_RESOLVE",
+                        "client=$client videoId=$videoId failed: ${t.javaClass.simpleName} - ${t.message}",
+                    )
                     // Fast-fail in offline unit tests where network is intentionally stubbed out
                     if (t is IOException && t.message == "offline epoch test") {
                         throw t
@@ -168,7 +223,7 @@ private fun Stream.fillFrom(page: PlayerPage) {
             compareByDescending<Format> { it.height }
                 .thenByDescending { it.bitrate },
         )
-    subtitles = runCatching { page.extractor.subtitlesDefault }
+    subtitles = runCatching { info.subtitles ?: page.extractor.subtitlesDefault }
         .getOrDefault(emptyList())
         .mapNotNull { track ->
             val url = track.content.takeIf { it.isNotBlank() } ?: return@mapNotNull null
@@ -185,8 +240,11 @@ private fun Stream.fillFrom(page: PlayerPage) {
 
 private fun VideoStream.toFormat(videoOnly: Boolean = false): Format {
     val item = runCatching { itagItem }.getOrNull()
+    val urlStr = content.orEmpty()
+    val hasRanges = initStart >= 0 && initEnd >= initStart && indexEnd > indexStart
+    val plan = buildRequestPlan(urlStr, item?.contentLength ?: -1L, adaptive = videoOnly || hasRanges)
     return Format(
-        url = content.orEmpty(),
+        url = urlStr,
         height = height,
         width = width,
         bitrate = bitrate,
@@ -202,13 +260,17 @@ private fun VideoStream.toFormat(videoOnly: Boolean = false): Format {
         indexStart = indexStart,
         indexEnd = indexEnd,
         approxDurationMs = item?.approxDurationMs ?: -1L,
+        requestPlan = plan,
     )
 }
 
 private fun AudioStream.toFormat(): Format {
     val item = runCatching { itagItem }.getOrNull()
+    val urlStr = content.orEmpty()
+    val hasRanges = initStart >= 0 && initEnd >= initStart && indexEnd > indexStart
+    val plan = buildRequestPlan(urlStr, item?.contentLength ?: -1L, adaptive = true || hasRanges)
     return Format(
-        url = content.orEmpty(),
+        url = urlStr,
         bitrate = if (averageBitrate > 0) averageBitrate else bitrate,
         codec = codec,
         container = format?.name,
@@ -227,7 +289,87 @@ private fun AudioStream.toFormat(): Format {
         audioTrackName = audioTrackName?.takeIf { it.isNotBlank() },
         audioTrackType = null,
         audioTrackOriginal = false,
+        requestPlan = plan,
     )
+}
+
+internal fun buildRequestPlan(
+    url: String,
+    contentLength: Long = -1L,
+    adaptive: Boolean = true,
+): org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan? {
+    if (url.isBlank()) return null
+    val clientParam = run {
+        val amp = url.indexOf("&c=")
+        val q = url.indexOf("?c=")
+        val start = when {
+            amp >= 0 && (q < 0 || amp < q) -> amp + 3
+            q >= 0 -> q + 3
+            else -> -1
+        }
+        if (start < 0) null
+        else {
+            val end = url.indexOf('&', start).let { if (it < 0) url.length else it }
+            url.substring(start, end).ifEmpty { null }
+        }
+    }
+    val profile = when (clientParam?.uppercase()) {
+        "VISIONOS" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS
+        "TVHTML5", "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5
+        "ANDROID" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.ANDROID
+        "ANDROID_VR" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.ANDROID_VR
+        "IOS" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.IOS
+        "WEB_EMBEDDED_PLAYER" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB_EMBEDDED_PLAYER
+        "WEB", "MWEB" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB
+        else -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS
+    }
+    val ua = when (clientParam?.uppercase()) {
+        "VISIONOS" -> "com.google.visionos.youtube/1.02(RealityDevice14,1; U; CPU visionOS 25_6_0 like Mac OS X; en_US)"
+        "TVHTML5" -> "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"
+        "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER" -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36,gzip(gfe)"
+        "ANDROID" -> "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip"
+        "MWEB" -> "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)"
+        else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+    }
+    val headers = when (clientParam?.uppercase()) {
+        "TVHTML5", "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "MWEB", "WEB" -> mapOf(
+            "Origin" to "https://www.youtube.com",
+            "Referer" to "https://www.youtube.com/",
+        )
+        else -> emptyMap()
+    }
+    val resolvedLen = if (contentLength > 0) contentLength else parseContentLengthFromUrl(url)
+    val isTvHtml5 = profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5
+    val isAndroid = profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.ANDROID
+    val isWeb = profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB ||
+        profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB_EMBEDDED_PLAYER
+    return org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan(
+        session = org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession(userAgent = ua),
+        profile = profile,
+        protocol = org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan.Protocol.HTTPS,
+        range = if (isAndroid) {
+            if (adaptive) org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan.Range.QUERY
+            else org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan.Range.HEADER
+        } else {
+            org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan.Range.HEADER
+        },
+        allowPostFallback = !isTvHtml5 && !isWeb,
+        headers = headers,
+        userAgent = ua,
+        resourceLength = resolvedLen,
+    )
+}
+
+private fun parseContentLengthFromUrl(url: String): Long {
+    val amp = url.indexOf("&clen=")
+    val q = url.indexOf("?clen=")
+    val start = when {
+        amp >= 0 && (q < 0 || amp < q) -> amp + 6
+        q >= 0 -> q + 6
+        else -> return -1L
+    }
+    val end = url.indexOf('&', start).let { if (it < 0) url.length else it }
+    return url.substring(start, end).toLongOrNull() ?: -1L
 }
 
 private fun bestImageUrl(images: List<Image>): String? {

@@ -28,9 +28,33 @@
       if (value.length <= 2 * 1024 * 1024) window.NativePlayerCapture.postMessage(value);
     } catch {}
   }
-  function captureConfiguration() { publish({ configuration: configuration() }); }
+  let lastPublishedInitialId = null;
+  function captureInitialPlayerResponse() {
+    try {
+      const player = window.ytInitialPlayerResponse;
+      const videoId = player?.videoDetails?.videoId;
+      if (!videoId || videoId === lastPublishedInitialId) return;
+      if (player?.playabilityStatus?.status !== 'OK' || !player?.streamingData) return;
+      lastPublishedInitialId = videoId;
+      const config = configuration();
+      if (config) {
+        config._IS_LIVE = player.videoDetails?.isLiveContent === true;
+        config._VIDEO_ID = videoId;
+      }
+      publish({
+        request: JSON.stringify({ videoId, context: { client: { clientName: 'MWEB' } } }),
+        response: JSON.stringify(player),
+        configuration: config,
+      });
+    } catch {}
+  }
+  function captureConfiguration() {
+    publish({ configuration: configuration() });
+    captureInitialPlayerResponse();
+  }
   captureConfiguration();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', captureConfiguration, { once: true });
+  window.addEventListener('yt-navigate-finish', captureConfiguration);
   window.fetch = function(input, init) {
     const url = typeof input === 'string' ? input : input?.url || '';
     const method = String(init?.method || input?.method || 'GET').toUpperCase();

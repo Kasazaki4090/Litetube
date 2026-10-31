@@ -13,7 +13,14 @@
     ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"] {display:none!important}
     ${[].concat(...headers.map(root => appLinks.map(link => root + ' ' + link))).join(',')} {display:none!important}
     tp-yt-paper-dialog:has(yt-mealbar-promo-renderer),
-    ytd-rich-item-renderer:has(ytd-display-ad-renderer) {display:none!important}`;
+    ytd-rich-item-renderer:has(ytd-display-ad-renderer) {display:none!important}
+    tp-yt-paper-item:has(ytm-open-in-app-renderer),
+    tp-yt-paper-item:has([aria-hidden="true"]),
+    yt-list-item-shape:has([aria-hidden="true"]),
+    [role="menuitem"][aria-hidden="true"],
+    yt-list-item-view-model[aria-hidden="true"],
+    ytm-menu-service-item-renderer[aria-hidden="true"],
+    ytm-menu-navigation-item-renderer[aria-hidden="true"] {display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important}`;
   const appLabels = new Set([
     'open app', 'open in app', 'open in the app', 'open the app', 'use app', 'use the app',
     '打开应用', '在应用中打开', '開啟應用程式', '打開應用程式', '在應用程式中開啟',
@@ -46,7 +53,8 @@
   const hiddenPromotions = new WeakMap();
   const closingPromotions = new WeakMap();
   const dialogs = '[role="dialog"],ytm-dialog,tp-yt-paper-dialog,c3-dialog';
-  const rows = 'yt-list-item-view-model,ytm-menu-service-item-renderer,ytm-menu-navigation-item-renderer,ytm-compact-link-renderer';
+  const rowContainers = 'ytm-menu-navigation-item-renderer,ytm-menu-service-item-renderer,ytm-compact-link-renderer,yt-sheet-item-view-model,yt-list-item-view-model,tp-yt-paper-item,ytm-menu-item,[role="menuitem"]';
+  const rows = 'yt-list-item-shape,' + rowContainers;
   function appLink(href) {
     href = String(href || '').trim();
     if (!href || href[0] === '#') return false;
@@ -68,7 +76,7 @@
     for (const header of document.querySelectorAll(surfaces.join(','))) {
       for (const control of header.querySelectorAll('a,button,[role="button"]')) {
         const labels = [control.getAttribute('aria-label'), control.textContent].map(normalized);
-        const button = control.closest?.(rows) || control;
+        const button = control.closest?.(rowContainers) || control.closest?.(rows) || control;
         const linked = appLink(control.getAttribute('href') || '');
         if (linked || labels.some(label => appLabels.has(label))) {
           const dialog = control.closest?.(dialogs);
@@ -77,14 +85,30 @@
           }
           if (!hiddenPromotions.has(button)) hiddenPromotions.set(button, {
             display: button.style.getPropertyValue('display'), priority: button.style.getPropertyPriority('display'),
+            height: button.style.getPropertyValue('height'),
+            minHeight: button.style.getPropertyValue('min-height'),
+            margin: button.style.getPropertyValue('margin'),
+            padding: button.style.getPropertyValue('padding'),
             aria: button.getAttribute('aria-hidden'),
           });
           button.style.setProperty('display', 'none', 'important');
+          button.style.setProperty('height', '0px', 'important');
+          button.style.setProperty('min-height', '0px', 'important');
+          button.style.setProperty('margin', '0px', 'important');
+          button.style.setProperty('padding', '0px', 'important');
           button.setAttribute('aria-hidden', 'true');
         } else if (hiddenPromotions.has(button)) {
           const previous = hiddenPromotions.get(button);
           if (previous.display) button.style.setProperty('display', previous.display, previous.priority);
           else button.style.removeProperty('display');
+          if (previous.height) button.style.setProperty('height', previous.height);
+          else button.style.removeProperty('height');
+          if (previous.minHeight) button.style.setProperty('min-height', previous.minHeight);
+          else button.style.removeProperty('min-height');
+          if (previous.margin) button.style.setProperty('margin', previous.margin);
+          else button.style.removeProperty('margin');
+          if (previous.padding) button.style.setProperty('padding', previous.padding);
+          else button.style.removeProperty('padding');
           if (previous.aria === null) button.removeAttribute('aria-hidden');
           else button.setAttribute('aria-hidden', previous.aria);
           hiddenPromotions.delete(button);

@@ -73,6 +73,7 @@ data class PlayerUiState(
     val fullscreen: Boolean = false,
     val controlsVisible: Boolean = true,
     val loading: Boolean = false,
+    val prepared: Boolean = false,
     val isPlaying: Boolean = false,
     val durationMs: Long = 0L,
     val speed: Float = 1f,
@@ -399,6 +400,7 @@ class PlayerViewModel(
             it.copy(
                 diagnostics = s.diagnostics,
                 loading = s.isBuffering && s.userWantsPlay,
+                prepared = s.prepared,
                 isPlaying = s.isPlaying,
                 durationMs = s.durationMs,
                 speed = s.speed,
@@ -595,7 +597,7 @@ class PlayerViewModel(
             pageHeightDp = height, pageViewportWidthDp = viewportWidth) }
     }
 
-    /** An active watch page expands the preserved local player. */
+    /** An active watch page expands the preserved local player or switches to a new video. */
     fun onReturnToWatch(pageUrl: String? = null) {
         if (PageKind.isShorts(pageUrl)) return
         val state = _uiState.value
@@ -604,22 +606,29 @@ class PlayerViewModel(
             _uiState.update { it.copy(visible = true, mini = false, fullscreen = false, controlsVisible = true) }
             return
         }
+        val targetId = VideoId.parse(pageUrl)
         if (state.mini) {
             if (shouldExpandMiniOnReturn(pageUrl)) {
                 _uiState.update {
                     it.copy(mini = false, visible = true, controlsVisible = true)
                 }
                 applyAutoFullscreen()
-                val pageId = VideoId.parse(pageUrl)
-                if (pageId != null && pageId != state.videoId && pageUrl != null) {
+                if (targetId != null && targetId != state.videoId && pageUrl != null) {
                     startPlayback(pageUrl, keepMini = false)
                 }
             }
             return
         }
+        if (targetId != null && targetId != state.videoId && pageUrl != null) {
+            startPlayback(pageUrl, keepMini = false)
+            return
+        }
+        if (state.error != null && pageUrl != null) {
+            startPlayback(pageUrl, keepMini = false)
+            return
+        }
         if (state.visible) return
-        val pageId = VideoId.parse(pageUrl) ?: return
-        if (pageId != state.videoId) return
+        if (targetId != null && targetId != state.videoId) return
         val resumeUrl = state.url ?: return
         startPlayback(resumeUrl, keepMini = false)
     }
@@ -676,6 +685,7 @@ class PlayerViewModel(
                 url = url,
                 videoId = id ?: it.videoId,
                 loading = if (switching) true else it.loading,
+                prepared = if (switching) false else it.prepared,
                 pageHeightDp = null,
                 pageTopDp = null,
                 pageLeftDp = 0,

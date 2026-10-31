@@ -95,6 +95,7 @@ class YoutubeMediaRequests(
             request = first
             while (true) {
                 if (!current(plan.session)) throw sessionChanged()
+                android.util.Log.i("YoutubeMediaRequests", "exchange: ${request.method} ${request.url} headers=${request.headers}")
                 val response = chain.proceed(request)
                 if (response.code !in setOf(301, 302, 303, 307, 308)) return response
                 var target = response.header("Location")?.let { response.request.url.resolve(it) }

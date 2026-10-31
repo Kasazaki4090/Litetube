@@ -23,10 +23,7 @@ class ExtractorTest {
 
     @Before
     fun setUp() {
-        assumeTrue(
-            "set YTL_NETWORK_TESTS=1 to run the live extraction tests",
-            System.getenv("YTL_NETWORK_TESTS") == "1",
-        )
+        assumeTrue("YTL_NETWORK_TESTS != 1", System.getenv("YTL_NETWORK_TESTS") == "1")
         assumeTrue("network unavailable", isOnline())
         extractor = Extractor(
             downloader = HttpDownloader(

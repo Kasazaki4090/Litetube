@@ -21,6 +21,7 @@ import androidx.media3.datasource.cache.SimpleCache
 import com.hhst.youtubelite.core.Constants
 import java.io.File
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import androidx.media3.common.C
 import androidx.media3.exoplayer.hls.HlsDataSourceFactory
 import androidx.media3.exoplayer.hls.DefaultHlsDataSourceFactory
@@ -108,9 +109,20 @@ class PlayerDataSource private constructor(
                 live = liveUpstream,
                 manifestFactory = { plan -> youtubeFactory(http, range = false, rn = false).setMediaRequests(plans, plan) },
                 formatFactory = { formats, dash, cached ->
+                    formats.forEach { format ->
+                        format.requestPlan?.let { plan ->
+                            plans?.register(format.url, plan)
+                        }
+                    }
                     val byUrl = formats.associateBy { it.url }
+                    val byNormalized = formats.associateBy {
+                        it.url.toHttpUrlOrNull()?.newBuilder()?.removeAllQueryParameters("range")?.removeAllQueryParameters("rn")?.build()?.toString() ?: it.url
+                    }
                     val upstream = youtubeFactory(http, range = dash, rn = false).setMediaRequests(plans)
-                        .setPlanResolver { url -> byUrl[url]?.requestPlan }
+                        .setPlanResolver { url ->
+                            byUrl[url]?.requestPlan
+                                ?: url.toHttpUrlOrNull()?.newBuilder()?.removeAllQueryParameters("range")?.removeAllQueryParameters("rn")?.build()?.toString()?.let { byNormalized[it]?.requestPlan }
+                        }
                     if (!cached) upstream else maybeCache(context, upstream, CacheKeyFactory { spec ->
                         byUrl[spec.uri.toString()]?.let(YoutubePlaybackCacheKey::of)
                             ?: VIDEO_PLAYBACK_CACHE_KEY.buildCacheKey(spec)

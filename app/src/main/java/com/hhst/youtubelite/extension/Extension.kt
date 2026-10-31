@@ -4,7 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.hhst.youtubelite.R
 
-enum class ExtensionKind { GROUP, TOGGLE, NAV, SLIDER }
+enum class ExtensionKind { GROUP, TOGGLE, NAV, SLIDER, CHOICE }
 
 /** Settings catalog node: group (children), toggle (key), or navigation. */
 data class Extension(
@@ -52,6 +52,12 @@ data class Extension(
                     toggle(PreferenceKeys.REMEMBER_PLAYBACK_SPEED, R.string.remember_playback_speed),
                     toggle(PreferenceKeys.REMEMBER_RESIZE_MODE, R.string.remember_resize_mode),
                     toggle(PreferenceKeys.REMEMBER_SUBTITLE_LANGUAGE, R.string.remember_subtitle_language),
+                    Extension(
+                        id = PreferenceKeys.PREFERRED_SUBTITLE_LANGUAGE,
+                        key = PreferenceKeys.PREFERRED_SUBTITLE_LANGUAGE,
+                        title = R.string.preferred_subtitle_language,
+                        kind = ExtensionKind.CHOICE,
+                    ),
                     toggle(PreferenceKeys.USE_ORIGINAL_TITLE, R.string.use_original_title),
                 ),
             ),

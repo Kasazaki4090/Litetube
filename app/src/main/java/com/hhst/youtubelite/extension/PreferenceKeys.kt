@@ -10,6 +10,7 @@ object PreferenceKeys {
     const val REMEMBER_LAST_POSITION = "remember_last_position"
     const val REMEMBER_RESIZE_MODE = "remember_resize_mode"
     const val REMEMBER_SUBTITLE_LANGUAGE = "remember_subtitle_language"
+    const val PREFERRED_SUBTITLE_LANGUAGE = "preferred_subtitle_language"
     const val USE_ORIGINAL_TITLE = "use_original_title"
 
     const val ENABLE_BACKGROUND_PLAY = "enable_background_play"

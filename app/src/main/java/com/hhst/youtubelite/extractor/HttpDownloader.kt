@@ -1,9 +1,11 @@
 package com.hhst.youtubelite.extractor
 
 import android.webkit.CookieManager
+import com.google.gson.JsonParser
 import com.hhst.youtubelite.core.Constants
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.downloader.CancellableCall
 import org.schabi.newpipe.extractor.downloader.Downloader
@@ -32,6 +34,13 @@ internal object AuthContextStore {
     var loggedIn: Boolean = false
         private set
 
+    private data class BrowserPlayerEntry(
+        val body: String,
+        val capturedAtMs: Long,
+    )
+
+    private val browserPlayerResponses = LinkedHashMap<String, BrowserPlayerEntry>(16, 0.75f, true)
+
     fun updateFromBrowser(
         visitorData: String?,
         dataSyncId: String?,
@@ -42,6 +51,47 @@ internal object AuthContextStore {
         if (!dataSyncId.isNullOrBlank()) this.dataSyncId = dataSyncId.trim()
         if (!sessionIndex.isNullOrBlank()) this.sessionIndex = sessionIndex.trim()
         this.loggedIn = loggedIn
+    }
+
+    fun putBrowserPlayerResponse(videoId: String?, responseBody: String?) {
+        val id = VideoId.parse(videoId) ?: return
+        val rawBody = responseBody?.takeIf { it.isNotBlank() && it.length <= 2 * 1024 * 1024 } ?: return
+        runCatching {
+            val parsed = JsonParser.parseString(rawBody).asJsonObject
+            if (parsed.getAsJsonObject("videoDetails")?.get("videoId")?.asString != id) return
+            if (parsed.getAsJsonObject("playabilityStatus")?.get("status")?.asString != "OK") return
+            val streamingData = parsed.getAsJsonObject("streamingData") ?: return
+            if (streamingData.has("serverAbrStreamingUrl")) {
+                streamingData.remove("serverAbrStreamingUrl")
+            }
+            val body = parsed.toString()
+            synchronized(browserPlayerResponses) {
+                browserPlayerResponses[id] = BrowserPlayerEntry(body, System.currentTimeMillis())
+                while (browserPlayerResponses.size > 16) {
+                    browserPlayerResponses.remove(browserPlayerResponses.keys.first())
+                }
+            }
+        }
+    }
+
+    fun getBrowserPlayerResponse(videoId: String?): String? {
+        val id = VideoId.parse(videoId) ?: return null
+        val now = System.currentTimeMillis()
+        synchronized(browserPlayerResponses) {
+            val entry = browserPlayerResponses[id] ?: return null
+            if (now - entry.capturedAtMs > 180_000L) {
+                browserPlayerResponses.remove(id)
+                return null
+            }
+            return entry.body
+        }
+    }
+
+    fun clearBrowserPlayerResponse(videoId: String?) {
+        val id = VideoId.parse(videoId) ?: return
+        synchronized(browserPlayerResponses) {
+            browserPlayerResponses.remove(id)
+        }
     }
 
     fun hasAuthCookies(): Boolean {
@@ -189,25 +239,48 @@ class HttpDownloader(
             }
 
             if (path.startsWith("/youtubei/")) {
-                val visitorId = AuthContextStore.visitorData
-                    ?: AuthContextStore.extractCookieValue(mergedCookie, "VISITOR_INFO1_LIVE")
-                if (!visitorId.isNullOrBlank()) {
-                    builder.header("X-Goog-Visitor-Id", visitorId)
-                }
+                val payloadString = dataToSend?.let { String(it, StandardCharsets.UTF_8) }.orEmpty()
+                val currentClient = NewPipe.getYoutubePlayerClient()
+                val isTvOrAppClient = payloadString.contains(""""clientName":"TVHTML5"""") ||
+                    payloadString.contains(""""clientName":"TVHTML5_SIMPLY"""") ||
+                    payloadString.contains(""""clientName":"VISIONOS"""") ||
+                    payloadString.contains(""""clientName":"ANDROID"""") ||
+                    payloadString.contains(""""clientName":"IOS"""") ||
+                    currentClient == "tv_downgraded" ||
+                    currentClient == "tv_samsung" ||
+                    currentClient == "tv_simply" ||
+                    currentClient == "visionos"
 
-                if (!sapisid.isNullOrBlank()) {
-                    val origin = if (host.startsWith("m.")) "https://m.youtube.com" else "https://www.youtube.com"
-                    val (userId, pageId) = AuthContextStore.parseDataSyncId(AuthContextStore.dataSyncId)
-                    builder.header(
-                        "Authorization",
-                        AuthContextStore.buildSapIsIdAuthorization(sapisid, origin, userId)
-                    )
-                    builder.header("Origin", origin)
-                    builder.header("X-Origin", origin)
-                    builder.header("X-Youtube-Bootstrap-Logged-In", "true")
-                    builder.header("X-Goog-AuthUser", AuthContextStore.sessionIndex ?: "0")
-                    if (!pageId.isNullOrBlank()) {
-                        builder.header("X-Goog-PageId", pageId)
+                if (isTvOrAppClient) {
+                    builder.removeHeader("Cookie")
+                    builder.removeHeader("Authorization")
+                    builder.removeHeader("Origin")
+                    builder.removeHeader("X-Origin")
+                    builder.removeHeader("X-Youtube-Bootstrap-Logged-In")
+                    builder.removeHeader("X-Goog-AuthUser")
+                    builder.removeHeader("X-Goog-PageId")
+                    builder.removeHeader("X-Goog-Visitor-Id")
+                } else {
+                    val visitorId = AuthContextStore.visitorData
+                        ?: AuthContextStore.extractCookieValue(mergedCookie, "VISITOR_INFO1_LIVE")
+                    if (!visitorId.isNullOrBlank()) {
+                        builder.header("X-Goog-Visitor-Id", visitorId)
+                    }
+
+                    if (!sapisid.isNullOrBlank()) {
+                        val origin = if (host.startsWith("m.")) "https://m.youtube.com" else "https://www.youtube.com"
+                        val (userId, pageId) = AuthContextStore.parseDataSyncId(AuthContextStore.dataSyncId)
+                        builder.header(
+                            "Authorization",
+                            AuthContextStore.buildSapIsIdAuthorization(sapisid, origin, userId)
+                        )
+                        builder.header("Origin", origin)
+                        builder.header("X-Origin", origin)
+                        builder.header("X-Youtube-Bootstrap-Logged-In", "true")
+                        builder.header("X-Goog-AuthUser", AuthContextStore.sessionIndex ?: "0")
+                        if (!pageId.isNullOrBlank()) {
+                            builder.header("X-Goog-PageId", pageId)
+                        }
                     }
                 }
             }
@@ -224,30 +297,99 @@ class HttpDownloader(
     private fun existingCookiesHeader(headers: Map<String, List<String>>?): String? =
         headers?.entries?.firstOrNull { it.key.equals("Cookie", ignoreCase = true) }?.value?.firstOrNull()
 
-    private fun sanitizeWebMetadataProbeResponse(request: Request, bodyString: String): String {
-        val url = request.url()
-        if (!url.contains("\$fields=microformat,playabilityStatus")) {
-            return bodyString
+    private fun stripServerAbrStreamingUrl(body: String): String {
+        if (!body.contains("serverAbrStreamingUrl")) return body
+        return runCatching {
+            val parsed = JsonParser.parseString(body).asJsonObject
+            val streamingData = parsed.getAsJsonObject("streamingData") ?: return body
+            if (streamingData.has("serverAbrStreamingUrl")) {
+                streamingData.remove("serverAbrStreamingUrl")
+                parsed.toString()
+            } else {
+                body
+            }
+        }.getOrDefault(body)
+    }
+
+    private fun sanitizeWebMetadataProbeResponse(request: Request, rawBodyString: String): String {
+        val bodyString = if (request.url().contains("/youtubei/v1/player")) {
+            stripServerAbrStreamingUrl(rawBodyString)
+        } else {
+            rawBodyString
         }
-        if (!bodyString.contains("LOGIN_REQUIRED")) {
+        val url = request.url()
+        val payload = request.dataToSend()?.let { String(it, StandardCharsets.UTF_8) }.orEmpty()
+        val videoId = VIDEO_ID_REGEX.find(payload)?.groupValues?.getOrNull(1)
+
+        val isBotOrLoginRequired = bodyString.contains("LOGIN_REQUIRED") ||
+            bodyString.contains("Sign in to confirm you") ||
+            bodyString.contains("Sign in to confirm you’re not a bot") ||
+            bodyString.contains("Sign in to confirm you're not a bot")
+        if (!isBotOrLoginRequired) {
             return bodyString
         }
         val lower = bodyString.lowercase()
-        if (lower.contains("age") ||
-            lower.contains("inappropriate") ||
-            lower.contains("desktoplegacyagegatereason") ||
-            lower.contains("private")
+        if (!lower.contains("not a bot") && (
+                lower.contains("confirm your age") ||
+                    lower.contains("age-restricted") ||
+                    lower.contains("inappropriate") ||
+                    lower.contains("desktoplegacyagegatereason") ||
+                    lower.contains("this video is private")
+                )
         ) {
             return bodyString
         }
-        val payload = request.dataToSend()?.let { String(it, StandardCharsets.UTF_8) }.orEmpty()
-        val videoId = VIDEO_ID_REGEX.find(payload)?.groupValues?.getOrNull(1) ?: return bodyString
-        return """{"playabilityStatus":{"status":"OK"},"videoDetails":{"videoId":"$videoId"},"microformat":{"playerMicroformatRenderer":{}}}"""
+        if (videoId.isNullOrBlank()) return bodyString
+        var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
+        if (browserResponse == null) {
+            val start = System.currentTimeMillis()
+            while (browserResponse == null && System.currentTimeMillis() - start < 1000L) {
+                try {
+                    Thread.sleep(50)
+                } catch (e: InterruptedException) {
+                    break
+                }
+                browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
+            }
+        }
+        browserResponse?.let { return it }
+        return """{"playabilityStatus":{"status":"OK"},"videoDetails":{"videoId":"$videoId"},"microformat":{"playerMicroformatRenderer":{"uploadDate":"1970-01-01","publishDate":"1970-01-01"}}}"""
     }
 
     override fun execute(request: Request): Response {
-        val okHttpRequest = buildOkHttpRequest(request)
         val url = request.url()
+        val payload = request.dataToSend()?.let { String(it, StandardCharsets.UTF_8) }.orEmpty()
+        val videoId = VIDEO_ID_REGEX.find(payload)?.groupValues?.getOrNull(1)
+
+        val clientName = NewPipe.getYoutubePlayerClient()
+        val isMweb = clientName == "mweb" || clientName == "web"
+        if (!videoId.isNullOrBlank() && url.contains("/youtubei/v1/player") && !url.contains("\$fields=microformat")) {
+            var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
+            if (browserResponse == null && (isMweb || AuthContextStore.hasAuthCookies())) {
+                val start = System.currentTimeMillis()
+                while (browserResponse == null && System.currentTimeMillis() - start < 1500L) {
+                    try {
+                        Thread.sleep(50)
+                    } catch (e: InterruptedException) {
+                        break
+                    }
+                    browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
+                }
+            }
+            if (browserResponse != null) {
+                val bytes = browserResponse.toByteArray(Charsets.UTF_8)
+                return Response(
+                    200,
+                    "OK",
+                    emptyMap(),
+                    browserResponse,
+                    bytes,
+                    url,
+                )
+            }
+        }
+
+        val okHttpRequest = buildOkHttpRequest(request)
 
         client.newCall(okHttpRequest).execute().use { response ->
             if (response.code == 429) throw ReCaptchaException("HTTP 429", url)
@@ -267,22 +409,58 @@ class HttpDownloader(
     }
 
     override fun executeAsync(request: Request, callback: AsyncCallback): CancellableCall {
-        val okHttpRequest = buildOkHttpRequest(request)
         val url = request.url()
+        val payload = request.dataToSend()?.let { String(it, StandardCharsets.UTF_8) }.orEmpty()
+        val videoId = VIDEO_ID_REGEX.find(payload)?.groupValues?.getOrNull(1)
+
+        val clientName = NewPipe.getYoutubePlayerClient()
+        val isMweb = clientName == "mweb" || clientName == "web"
+        val okHttpRequest = buildOkHttpRequest(request)
         val call = client.newCall(okHttpRequest)
         val cancellableCall = CancellableCall(call)
 
+        if (!videoId.isNullOrBlank() && url.contains("/youtubei/v1/player") && !url.contains("\$fields=microformat")) {
+            var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
+            if (browserResponse == null && (isMweb || AuthContextStore.hasAuthCookies())) {
+                val start = System.currentTimeMillis()
+                while (browserResponse == null && System.currentTimeMillis() - start < 1500L) {
+                    try {
+                        Thread.sleep(50)
+                    } catch (e: InterruptedException) {
+                        break
+                    }
+                    browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
+                }
+            }
+            if (browserResponse != null) {
+                val bytes = browserResponse.toByteArray(Charsets.UTF_8)
+                val result = Response(
+                    200,
+                    "OK",
+                    emptyMap(),
+                    browserResponse,
+                    bytes,
+                    url,
+                )
+                callback.onSuccess(result)
+                cancellableCall.setFinished()
+                return cancellableCall
+            }
+        }
+
         call.enqueue(object : okhttp3.Callback {
             override fun onFailure(call: okhttp3.Call, e: IOException) {
-                cancellableCall.setFinished()
-                callback.onError(e)
+                try {
+                    callback.onError(e)
+                } finally {
+                    cancellableCall.setFinished()
+                }
             }
 
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                 try {
                     response.use { res ->
                         if (res.code == 429) {
-                            cancellableCall.setFinished()
                             callback.onError(ReCaptchaException("HTTP 429", url))
                             return
                         }
@@ -298,12 +476,12 @@ class HttpDownloader(
                             bytes,
                             res.request.url.toString()
                         )
-                        cancellableCall.setFinished()
                         callback.onSuccess(result)
                     }
                 } catch (e: Exception) {
-                    cancellableCall.setFinished()
                     callback.onError(e)
+                } finally {
+                    cancellableCall.setFinished()
                 }
             }
         })

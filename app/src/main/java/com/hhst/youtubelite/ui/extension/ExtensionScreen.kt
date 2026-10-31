@@ -138,8 +138,10 @@ fun ExtensionScreen(
                             depth = 0,
                             expanded = uiState.expanded,
                             toggles = uiState.toggles,
+                            choices = uiState.choices,
                             onToggleExpand = viewModel::toggleExpanded,
                             onToggle = { key, enabled -> viewModel.setEnabled(key, enabled); haptics.perform(HapticsController.Event.SELECTION) },
+                            onChoice = { key, choice -> viewModel.setString(key, choice); haptics.perform(HapticsController.Event.SELECTION) },
                             strength = uiState.hapticStrength,
                             onStrength = viewModel::setHapticStrength,
                             onPreview = { haptics.perform(HapticsController.Event.SELECTION) },
@@ -185,14 +187,29 @@ fun ExtensionScreen(
     }
 }
 
+private val SUBTITLE_LANGUAGES = listOf(
+    "auto" to "自动 (Auto)",
+    "zh" to "中文 (Chinese)",
+    "en" to "English",
+    "es" to "Español",
+    "fr" to "Français",
+    "de" to "Deutsch",
+    "ja" to "日本語",
+    "ko" to "한국어",
+    "pt" to "Português",
+    "ru" to "Русский",
+)
+
 @Composable
 private fun GroupBlock(
     node: Extension,
     depth: Int,
     expanded: Set<String>,
     toggles: Map<String, Boolean>,
+    choices: Map<String, String>,
     onToggleExpand: (String) -> Unit,
     onToggle: (String, Boolean) -> Unit,
+    onChoice: (String, String) -> Unit,
     onNavigate: (String) -> Unit,
     strength: Int,
     onStrength: (Int) -> Unit,
@@ -215,8 +232,10 @@ private fun GroupBlock(
                         depth = depth + 1,
                         expanded = expanded,
                         toggles = toggles,
+                        choices = choices,
                         onToggleExpand = onToggleExpand,
                         onToggle = onToggle,
+                        onChoice = onChoice,
                         strength = strength,
                         onStrength = onStrength,
                         onPreview = onPreview,
@@ -232,6 +251,14 @@ private fun GroupBlock(
                         Slider(value = strength.toFloat(), onValueChange = { onStrength(it.toInt()) },
                             valueRange = 0f..100f, onValueChangeFinished = onPreview)
                     }
+                } else if (child.kind == ExtensionKind.CHOICE) {
+                    val key = child.key ?: continue
+                    ChoiceRow(
+                        title = child.title,
+                        value = choices[key] ?: "auto",
+                        depth = depth + 1,
+                        onSelect = { onChoice(key, it) },
+                    )
                 } else {
                     val key = child.key ?: continue
                     ToggleRow(
@@ -329,6 +356,99 @@ private fun ToggleRow(
         Switch(
             checked = checked,
             onCheckedChange = null,
+        )
+    }
+}
+
+@Composable
+private fun ChoiceRow(
+    title: Int,
+    value: String,
+    depth: Int,
+    onSelect: (String) -> Unit,
+) {
+    var showDialog by remember { mutableStateOf(false) }
+    val startPad = SettingsTokens.PageInset + SettingsTokens.Indent * (depth - 1).coerceAtLeast(0)
+    val displayValue = SUBTITLE_LANGUAGES.firstOrNull { it.first == value }?.second ?: value
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = SettingsTokens.RowHeight)
+            .clickable(role = Role.Button, onClick = { showDialog = true })
+            .padding(
+                start = startPad,
+                end = SettingsTokens.PageInset,
+                top = SettingsTokens.RowPadding,
+                bottom = SettingsTokens.RowPadding,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(
+                text = stringResource(title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = displayValue,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+
+    if (showDialog) {
+        val scheme = MaterialTheme.colorScheme
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            containerColor = scheme.surface,
+            titleContentColor = scheme.onSurface,
+            textContentColor = scheme.onSurfaceVariant,
+            title = { Text(stringResource(title)) },
+            text = {
+                Column(Modifier.fillMaxWidth()) {
+                    for ((code, name) in SUBTITLE_LANGUAGES) {
+                        val selected = code == value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 44.dp)
+                                .clickable {
+                                    onSelect(code)
+                                    showDialog = false
+                                }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (selected) scheme.primary else scheme.onSurface,
+                            )
+                            if (selected) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_check),
+                                    contentDescription = null,
+                                    tint = scheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            },
         )
     }
 }

@@ -682,10 +682,10 @@ fun ErrorOverlay(
         )
         Text(
             text = message,
-            color = Color.White.copy(alpha = 0.7f),
-            fontSize = 12.sp,
+            color = Color.White.copy(alpha = 0.85f),
+            fontSize = 13.sp,
             textAlign = TextAlign.Center,
-            maxLines = 3,
+            maxLines = 6,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 6.dp),
         )

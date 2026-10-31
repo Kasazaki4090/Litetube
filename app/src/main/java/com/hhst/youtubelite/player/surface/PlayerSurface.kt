@@ -350,7 +350,7 @@ fun PlayerSurface(
                 }
             }
         }
-        if (state.casting && !pip) {
+        if ((state.casting || state.loading || !state.prepared || state.error != null) && !pip) {
             Box(Modifier.fillMaxSize().background(Color.Black))
         }
 

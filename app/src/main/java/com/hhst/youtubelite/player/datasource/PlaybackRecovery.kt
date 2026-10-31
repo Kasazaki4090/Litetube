@@ -18,7 +18,7 @@ internal object PlaybackRecovery {
         var transportFailure = false
         while (cause != null && seen.add(cause)) {
             if (cause is IOException && cause.message == "MEDIA_SESSION_CHANGED") return Reason.SESSION_CHANGED
-            if (cause is IOException && cause.message in setOf("MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")) return Reason.URL_STALE
+            if (cause is IOException && cause.message in setOf("MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED", "MEDIA_EARLY_EOF")) return Reason.URL_STALE
             when (cause) {
                 is HttpDataSource.InvalidResponseCodeException -> if (cause.responseCode == 403) return Reason.HTTP_403
                 is SocketTimeoutException, is ConnectException, is NoRouteToHostException,

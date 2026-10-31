@@ -189,7 +189,10 @@ val appModule = module {
     }
 
     // Player
-    single { PlayerDataSource.create(androidContext(), get<OkHttpClient>(), get()) }
+    single(named("playerHttp")) {
+        get<OkHttpClient>()
+    }
+    single { PlayerDataSource.create(androidContext(), get<OkHttpClient>(named("playerHttp")), get()) }
     single {
         val meter = DefaultBandwidthMeter.getSingletonInstance(androidContext())
         MediaSourceResolver(get<PlayerDataSource>(), startupBandwidth = { meter.bitrateEstimate },

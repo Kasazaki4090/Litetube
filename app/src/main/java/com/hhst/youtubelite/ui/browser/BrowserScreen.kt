@@ -187,12 +187,22 @@ fun BrowserScreen(
         { context.startActivity(Intent(context, AboutActivity::class.java)) }
     }
 
-    // Share / open-with intents: route to a tab; the watch hook starts
-    // playback. Clearing after consumption lets the same URL re-share.
+    // Host create/destroy in effects so composition stays free of WebView side effects.
+    // The suspended watch tab keeps its host.
+    val liveTabIds = remember(tabs, uiState.suspendedWatchId) {
+        buildSet {
+            tabs.forEach { add(it.id) }
+            uiState.suspendedWatchId?.let { add(it) }
+        }
+    }
+    // Share / open-with intents: route to a tab and launch player when target is watch.
     LaunchedEffect(sharedUrl) {
         sharedUrl?.collect { url ->
             if (url != null) {
                 viewModel.openTab(url)
+                if (PageKind.isPlayerSurface(PageKind.of(url))) {
+                    playerViewModel.playVideo(url)
+                }
                 onSharedUrlConsumed()
             }
         }
@@ -228,15 +238,6 @@ fun BrowserScreen(
                 is DownloadUiStart.Started -> Unit
             }
             return@LaunchedEffect
-        }
-    }
-
-    // Host create/destroy in effects so composition stays free of WebView side effects.
-    // The suspended watch tab keeps its host.
-    val liveTabIds = remember(tabs, uiState.suspendedWatchId) {
-        buildSet {
-            tabs.forEach { add(it.id) }
-            uiState.suspendedWatchId?.let { add(it) }
         }
     }
     val queueAdded = stringResource(R.string.queue_item_added)
@@ -333,9 +334,15 @@ fun BrowserScreen(
     val latestHosts = rememberUpdatedState(hosts)
     val latestActiveId = rememberUpdatedState(activeId)
     val isDarkTheme = (LocalConfiguration.current.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    var lastThemeWasDark by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(isDarkTheme, liveTabIds) {
+        val themeChanged = lastThemeWasDark != null && lastThemeWasDark != isDarkTheme
+        lastThemeWasDark = isDarkTheme
         hosts.values.forEach { host ->
             WebViewFactory.syncTheme(host.webView, isDarkTheme)
+            if (themeChanged) {
+                host.webView.postDelayed({ host.webView.reload() }, 300)
+            }
         }
     }
 

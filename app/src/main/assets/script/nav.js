@@ -112,6 +112,19 @@
     return originalGo.apply(this, arguments);
   };
 
+  function extractVideoId(url) {
+    try {
+      const u = new URL(url, location.href);
+      if (u.hostname === 'youtu.be') {
+        const segs = u.pathname.split('/').filter(Boolean);
+        return segs[0] || null;
+      }
+      return u.searchParams.get('v') || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Opens [url] in a new tab unless it matches [location.href]'s kind.
   // Returns true when routed cross-tab, false to let navigation proceed in-page.
   function maybeOpen(url) {
@@ -120,9 +133,23 @@
     const path = new URL(nextUrl).pathname;
     if (/^\/signin(?:\/|$)|^\/accounts\/|^\/(?:check_connection|set_setting)$/i.test(path)) return false;
     const nextKind = kind(nextUrl);
+    const currentKind = kind(location.href);
     const bridge = window.Bridge;
     if (nextKind === 'shorts' && bridge && typeof bridge.shouldInheritShorts === 'function' && bridge.shouldInheritShorts()) return false;
-    if (nextKind === 'unknown' || nextKind === kind(location.href)) return false;
+    if (nextKind === 'unknown') return false;
+
+    // Cross-video switch: direct new video load refreshes page and starts fresh playback
+    if (nextKind === 'watch') {
+      const nextId = extractVideoId(nextUrl);
+      const currentId = extractVideoId(location.href);
+      if (nextId && (!currentId || nextId !== currentId)) {
+        openTab(nextUrl);
+        return true;
+      }
+      if (currentKind === 'watch') return false;
+    }
+
+    if (nextKind === currentKind) return false;
     openTab(nextUrl);
     return true;
   }
@@ -137,25 +164,54 @@
     return originalReplaceState.apply(this, arguments);
   };
 
+  function findHref(event) {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    for (const node of path) {
+      if (!node) continue;
+      if (node.tagName === 'A' && (node.getAttribute?.('href') || node.href)) {
+        return node.getAttribute?.('href') || node.href;
+      }
+      if (node.tagName === 'YTM-HOME-LOGO') return '/';
+      if (node.tagName === 'YTM-PIVOT-BAR-ITEM-RENDERER') {
+        const endpoint = node.data && node.data.navigationEndpoint;
+        const url = endpoint?.commandMetadata?.webCommandMetadata?.url;
+        if (url) return url;
+      }
+    }
+    const target = event.target;
+    if (target && target.closest) {
+      const a = target.closest('a');
+      if (a && (a.getAttribute?.('href') || a.href)) return a.getAttribute?.('href') || a.href;
+      if (target.closest('ytm-home-logo')) return '/';
+      const nav = target.closest('ytm-pivot-bar-item-renderer');
+      if (nav && nav.data && nav.data.navigationEndpoint) {
+        const meta = nav.data.navigationEndpoint.commandMetadata;
+        const url = meta?.webCommandMetadata?.url;
+        if (url) return url;
+      }
+    }
+    const searchNodes = path.length ? path : (target ? [target] : []);
+    for (const node of searchNodes) {
+      if (!node) continue;
+      const card = (node.matches && node.matches(
+        'ytm-media-item, yt-lockup-view-model, ytm-rich-item-renderer, ytm-compact-video-renderer, ytm-video-with-context-renderer, .media-item-thumbnail-container, .ytLockupViewModelHost'
+      )) ? node : (node.closest && node.closest(
+        'ytm-media-item, yt-lockup-view-model, ytm-rich-item-renderer, ytm-compact-video-renderer, ytm-video-with-context-renderer, .media-item-thumbnail-container, .ytLockupViewModelHost'
+      ));
+      if (card && card.querySelector) {
+        const a = card.querySelector(
+          'a[href*="/watch"], a[href^="/watch"], a[href*="/shorts/"], a[href^="/shorts/"], ' +
+          'a.ytLockupViewModelContentImage, a.ytmVideoPreviewNavigationEndpoint, a[href]'
+        );
+        if (a) return a.getAttribute?.('href') || a.href;
+      }
+    }
+    return null;
+  }
+
   document.addEventListener('click', (event) => {
     try {
-      const target = event.target;
-      const anchor = target && target.closest && target.closest('a');
-      const logo = target && target.closest && target.closest('ytm-home-logo');
-      const nav = target && target.closest && target.closest('ytm-pivot-bar-item-renderer');
-
-      let href;
-      // Bottom-bar internals are Polymer data; guard the read so a
-      // reshaped object never breaks clicks.
-      const endpoint = nav && nav.data && nav.data.navigationEndpoint;
-      if (endpoint) {
-        const metadata = endpoint.commandMetadata;
-        href = metadata && metadata.webCommandMetadata && metadata.webCommandMetadata.url;
-      } else if (anchor && anchor.href) {
-        href = anchor.getAttribute('href');
-      } else if (logo) {
-        href = '/';
-      }
+      const href = findHref(event);
       if (!href) return;
 
       if (maybeOpen(href)) {

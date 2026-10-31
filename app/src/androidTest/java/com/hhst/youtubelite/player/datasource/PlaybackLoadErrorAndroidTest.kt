@@ -18,7 +18,7 @@ import com.hhst.youtubelite.extractor.Metadata
 import com.hhst.youtubelite.extractor.Stream
 import com.hhst.youtubelite.extractor.ExtractionDiagnostics
 import com.hhst.youtubelite.extractor.YoutubeMediaRequests
-import com.grack.nanojson.JsonObject
+import com.google.gson.JsonObject
 import org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile
 import org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan
 import org.schabi.newpipe.extractor.services.youtube.streams.YoutubeSession
@@ -50,7 +50,8 @@ class PlaybackLoadErrorAndroidTest {
 
     @Test fun expiredRequestsAndSessionFencesImmediatelyReachSourceRecovery() {
         for (error in listOf(status(403), IOException("MEDIA_SESSION_CHANGED"),
-            IOException("MEDIA_OBJECT_CHANGED"), IOException("MEDIA_URL_EXPIRED"))) {
+            IOException("MEDIA_OBJECT_CHANGED"), IOException("MEDIA_URL_EXPIRED"),
+            IOException("MEDIA_EARLY_EOF"))) {
             assertEquals(C.TIME_UNSET, policy.getRetryDelayMsFor(info(IOException("wrapper", error))))
         }
     }

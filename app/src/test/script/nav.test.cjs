@@ -76,3 +76,46 @@ test('sheets, dialogs and search close on their own hash entry, not the native t
   history.back();
   assert.deepEqual(calls, ['web-back', ['web-go', -1], 'tab-back']);
 });
+
+test('cross-video navigation in watch tab triggers openTab and refreshes page/player', () => {
+  const opened = [], changes = [], handlers = {};
+  const context = {
+    URL,
+    location: { href: 'https://m.youtube.com/watch?v=video1', hash: '' },
+    history: { pushState: (_, __, url) => changes.push(url), replaceState() {} },
+    document: { addEventListener: (type, fn) => { handlers[type] = fn; } },
+    Bridge: { openTab: url => opened.push(url) }
+  };
+  context.window = context;
+  vm.runInNewContext(fs.readFileSync('app/src/main/assets/script/nav.js', 'utf8'), context);
+
+  // Same video pushState (e.g. comments or section jump) stays in page
+  context.history.pushState({}, '', '/watch?v=video1#comments');
+  assert.deepEqual(opened, []);
+  assert.deepEqual(changes, ['/watch?v=video1#comments']);
+
+  // Different video pushState calls openTab to trigger fresh reload
+  context.history.pushState({}, '', '/watch?v=video2');
+  assert.deepEqual(opened, ['https://m.youtube.com/watch?v=video2']);
+
+  // Click on media card element triggers openTab
+  let prevented = false;
+  let stopped = false;
+  handlers.click({
+    target: {
+      closest: selector => {
+        if (selector.includes('ytm-media-item')) {
+          return {
+            querySelector: () => ({ href: 'https://m.youtube.com/watch?v=video3', getAttribute: () => '/watch?v=video3' })
+          };
+        }
+        return null;
+      }
+    },
+    preventDefault: () => { prevented = true; },
+    stopImmediatePropagation: () => { stopped = true; }
+  });
+  assert.equal(prevented, true);
+  assert.equal(stopped, true);
+  assert.equal(opened[opened.length - 1], 'https://m.youtube.com/watch?v=video3');
+});

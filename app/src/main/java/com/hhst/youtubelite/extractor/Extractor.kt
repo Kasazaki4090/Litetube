@@ -3,7 +3,7 @@ package com.hhst.youtubelite.extractor
 import android.annotation.SuppressLint
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
-import com.grack.nanojson.JsonParser
+import com.google.gson.JsonParser
 import com.hhst.youtubelite.diagnostics.AppLog
 import com.hhst.youtubelite.diagnostics.DiagnosticContext
 import com.hhst.youtubelite.diagnostics.DiagnosticOutcome
@@ -43,18 +43,28 @@ class Extractor(
                         if (payload.isNullOrBlank()) return
                         runCatching {
                             generation()
-                            val root = JsonParser.`object`().from(payload)
-                            val config = root.getObject("configuration") ?: return
-                            val visitorData = config.getString("VISITOR_DATA", null)
-                            val dataSyncId = config.getString("DATASYNC_ID", null)
-                            val sessionIndex = config.getString("SESSION_INDEX", null)
-                            val loggedIn = config.getBoolean("LOGGED_IN", false)
-                            AuthContextStore.updateFromBrowser(
-                                visitorData = visitorData,
-                                dataSyncId = dataSyncId,
-                                sessionIndex = sessionIndex,
-                                loggedIn = loggedIn,
-                            )
+                            val root = JsonParser.parseString(payload).asJsonObject
+                            val config = root.getAsJsonObject("configuration")
+                            if (config != null) {
+                                val visitorData = config.get("VISITOR_DATA")?.takeIf { !it.isJsonNull }?.asString
+                                val dataSyncId = config.get("DATASYNC_ID")?.takeIf { !it.isJsonNull }?.asString
+                                val sessionIndex = config.get("SESSION_INDEX")?.takeIf { !it.isJsonNull }?.asString
+                                val loggedIn = config.get("LOGGED_IN")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                                AuthContextStore.updateFromBrowser(
+                                    visitorData = visitorData,
+                                    dataSyncId = dataSyncId,
+                                    sessionIndex = sessionIndex,
+                                    loggedIn = loggedIn,
+                                )
+                            }
+                            val responseBody = root.get("response")?.takeIf { !it.isJsonNull }?.asString
+                            if (!responseBody.isNullOrBlank()) {
+                                val videoId = config?.get("_VIDEO_ID")?.takeIf { !it.isJsonNull }?.asString
+                                    ?: root.get("request")?.takeIf { !it.isJsonNull }?.asString?.let { req ->
+                                        runCatching { JsonParser.parseString(req).asJsonObject.get("videoId")?.asString }.getOrNull()
+                                    }
+                                AuthContextStore.putBrowserPlayerResponse(videoId, responseBody)
+                            }
                         }
                     }
                 },
@@ -66,7 +76,44 @@ class Extractor(
     fun initialize(): Boolean = true
     fun sessionStamp(): String = AuthContextStore.visitorData.orEmpty()
     fun recoveryScope(): String = if (AuthContextStore.hasAuthCookies()) "authenticated" else "anonymous"
-    fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext? = null): ClientProfile? = null
+    fun noteMediaForbidden(videoId: String, url: String, diagnosticContext: DiagnosticContext? = null): ClientProfile? {
+        val clientParam = run {
+            val amp = url.indexOf("&c=")
+            val q = url.indexOf("?c=")
+            val start = when {
+                amp >= 0 && (q < 0 || amp < q) -> amp + 3
+                q >= 0 -> q + 3
+                else -> -1
+            }
+            if (start < 0) null
+            else {
+                val end = url.indexOf('&', start).let { if (it < 0) url.length else it }
+                url.substring(start, end).ifEmpty { null }
+            }
+        }
+        val profile = when (clientParam?.uppercase()) {
+            "VISIONOS" -> ClientProfile.VISIONOS
+            "TVHTML5", "TVHTML5_SIMPLY_EMBEDDED_PLAYER" -> ClientProfile.TVHTML5
+            "ANDROID" -> ClientProfile.ANDROID
+            "ANDROID_VR" -> ClientProfile.ANDROID_VR
+            "IOS" -> ClientProfile.IOS
+            "WEB_EMBEDDED_PLAYER" -> ClientProfile.WEB_EMBEDDED_PLAYER
+            "WEB", "MWEB" -> ClientProfile.WEB
+            else -> null
+        }
+        if (profile != null) {
+            if (profile != ClientProfile.WEB || AuthContextStore.getBrowserPlayerResponse(videoId) == null) {
+                forbiddenProfilesByVideo.computeIfAbsent(videoId) { ConcurrentHashMap.newKeySet() }.add(profile)
+            }
+            AppLog.event(
+                AppLog.Category.EXTRACTOR,
+                "media_forbidden_noted",
+                mapOf("videoId" to videoId, "profile" to profile.name),
+                context = diagnosticContext,
+            )
+        }
+        return profile
+    }
     fun extractionDiagnostics(): String =
         "PipePipeExtractor Engine (client=${NewPipe.getYoutubePlayerClient()}, auth=${AuthContextStore.hasAuthCookies()})"
 
@@ -96,6 +143,7 @@ class Extractor(
 
     fun invalidateStream(urlOrId: String) {
         val id = VideoId.parse(urlOrId) ?: return
+        AuthContextStore.clearBrowserPlayerResponse(id)
         streamEpochs.bump(id)
         cache.invalidateStream(id)
         inFlight.entries.removeIf { it.value.id == id }

@@ -20,7 +20,7 @@ class PlaybackRecoveryTest {
         assertEquals(PlaybackRecovery.Reason.SESSION_CHANGED, reason?.afterLightBudget())
     }
     @Test fun staleUrlsKeepTheirExistingFallbackAndUnclassifiedIoDoesNotRefreshTokens() {
-        for (code in listOf("MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")) {
+        for (code in listOf("MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED", "MEDIA_EARLY_EOF")) {
             val reason = PlaybackRecovery.classify(IOException(code))
             assertEquals(PlaybackRecovery.Reason.URL_STALE, reason)
             assertEquals(PlaybackRecovery.Reason.HTTP_403, reason?.afterLightBudget())

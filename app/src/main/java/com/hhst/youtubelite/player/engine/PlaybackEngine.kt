@@ -566,12 +566,14 @@ class PlaybackEngine(
         val requestUrl = VideoId.watchUrl(videoId)
         val explicitStart = VideoId.startPositionMs(urlOrId)
         userWantsPlay = true
-        if (videoId == _snapshot.value.videoId && _snapshot.value.prepared) {
+        if (videoId == _snapshot.value.videoId && (_snapshot.value.prepared || playJob?.isActive == true)) {
             _snapshot.value = _snapshot.value.copy(url = requestUrl)
-            if (explicitStart != null) {
-                seekTo(PlaybackProgress.clampStartMs(explicitStart, activePlayer().duration))
+            if (_snapshot.value.prepared) {
+                if (explicitStart != null) {
+                    seekTo(PlaybackProgress.clampStartMs(explicitStart, activePlayer().duration))
+                }
+                resumePlayback(activePlayer())
             }
-            resumePlayback(activePlayer())
             return
         }
         persistPosition()
@@ -638,10 +640,20 @@ class PlaybackEngine(
             .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
             .setPreferredAudioLanguage(null)
             .build()
+        // Immediately stop prior playback and reset media to enter clean buffering
+        handler.post {
+            player.stop()
+            player.clearMediaItems()
+        }
+        currentStream = null
+        currentMetadata = null
+        attachedContext = null
         _snapshot.value = PlaybackSnapshot(
             videoId = videoId,
             url = VideoId.watchUrl(videoId),
             isBuffering = true,
+            userWantsPlay = true,
+            prepared = false,
             speed = speed,
             loopMode = loop,
         )
@@ -1555,13 +1567,13 @@ class PlaybackEngine(
         playerLog("recovery_decision", mapOf("reason" to (reason?.name ?: "unsupported"), "light_attempts" to lightRefreshAttempts, "full_attempts" to reExtractAttempts), critical = false)
         val stream = currentStream
 
-        val failedUri = if (reason == RecoveryReason.HTTP_403) failingUri(error) else null
+        val failedUri = if (reason == RecoveryReason.HTTP_403 || reason?.afterLightBudget() == RecoveryReason.HTTP_403) failingUri(error) else null
         val forbiddenProfile = if (videoId != null) failedUri?.let {
             extractor.noteMediaForbidden(videoId, it.toString(), diagnosticContext)
         } else null
-        if (reason == RecoveryReason.HTTP_403) playerLog("recovery_client_feedback", mapOf(
+        if (reason == RecoveryReason.HTTP_403 || reason?.afterLightBudget() == RecoveryReason.HTTP_403) playerLog("recovery_client_feedback", mapOf(
             "applied" to (forbiddenProfile != null), "client" to forbiddenProfile?.name,
-            "reason" to if (forbiddenProfile != null) "http_403" else "unknown_or_stale_request_plan"))
+            "reason" to if (forbiddenProfile != null) (reason.name) else "unknown_or_stale_request_plan"))
 
         // Refresh the source once with the current session and tokens. A transport failure
         // is evidence about the connection, so it must not reset tokens or blame a client.
@@ -1690,6 +1702,12 @@ class PlaybackEngine(
         while (cause != null && seen.add(cause)) {
             if (cause is HttpDataSource.InvalidResponseCodeException && cause.responseCode == 403) {
                 return cause.dataSpec.uri
+            }
+            if (cause is HttpDataSource.HttpDataSourceException) {
+                val msg = cause.cause?.message ?: cause.message
+                if (msg in setOf("MEDIA_EARLY_EOF", "MEDIA_OBJECT_CHANGED", "MEDIA_URL_EXPIRED")) {
+                    return cause.dataSpec.uri
+                }
             }
             cause = cause.cause
         }
@@ -1898,6 +1916,10 @@ class PlaybackEngine(
     }
 
     private fun rememberedSubtitleKey(): String? {
+        val preferred = prefs.getString(PreferenceKeys.PREFERRED_SUBTITLE_LANGUAGE, "auto")
+        if (preferred.isNotBlank() && preferred != "auto") {
+            return preferred
+        }
         if (!prefs.isEnabled(PreferenceKeys.REMEMBER_SUBTITLE_LANGUAGE)) return null
         if (cache.get(KEY_SUBTITLE_OFF, String::class.java) != null) return null
         return cache.get(KEY_SUBTITLE, String::class.java)
@@ -1977,9 +1999,50 @@ class PlaybackEngine(
 
     private fun playbackFailed(t: Throwable): String {
         Log.w(TAG, "playback failed", t)
-        val liveUnavailable = generateSequence(t) { it.cause }.take(12)
-            .any { it.message == "LIVE_STREAM_SOURCE_UNAVAILABLE" }
-        return appContext.getString(if (liveUnavailable) R.string.player_live_unavailable else R.string.player_error)
+        val causes = generateSequence(t) { it.cause }.take(16).toList()
+
+        for (c in causes) {
+            val msg = c.message.orEmpty()
+            if (msg.contains("LIVE_STREAM_SOURCE_UNAVAILABLE", ignoreCase = true)) {
+                return appContext.getString(R.string.player_live_unavailable)
+            }
+            if (msg.contains("confirm that you're not a bot", ignoreCase = true) ||
+                msg.contains("Sign in to confirm you're not a bot", ignoreCase = true) ||
+                (msg.contains("bot", ignoreCase = true) && msg.contains("sign in", ignoreCase = true))
+            ) {
+                return "YouTube Bot 验证拦截 (Sign in to confirm you're not a bot)"
+            }
+            if (c is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                return when (c.responseCode) {
+                    403 -> "HTTP 403 访问被拒绝 (Forbidden - 流签名失效或被限制)"
+                    404 -> "HTTP 404 视频不存在或已被删除 (Not Found)"
+                    429 -> "HTTP 429 请求过于频繁，已被限流 (Too Many Requests)"
+                    else -> "HTTP ${c.responseCode} 网络错误 (${c.responseMessage ?: "Error"})"
+                }
+            }
+            if (msg.contains("403") && (msg.contains("forbidden", ignoreCase = true) || msg.contains("response code", ignoreCase = true))) {
+                return "HTTP 403 访问被拒绝 (Forbidden)"
+            }
+            if (msg.contains("404") && (msg.contains("not found", ignoreCase = true) || msg.contains("unavailable", ignoreCase = true))) {
+                return "HTTP 404 视频不存在或已被删除 (Not Found)"
+            }
+            if (msg.contains("MEDIA_EARLY_EOF", ignoreCase = true)) {
+                return "媒体流过早中断 (MEDIA_EARLY_EOF: 流连接被服务器截断)"
+            }
+            if (c is java.net.UnknownHostException) {
+                return "网络异常：无法解析域名 (${c.message})"
+            }
+            if (c is java.net.SocketTimeoutException) {
+                return "网络异常：连接超时 (${c.message})"
+            }
+            if (c is java.net.ConnectException) {
+                return "网络异常：连接被拒绝 (${c.message})"
+            }
+        }
+
+        val root = causes.lastOrNull() ?: t
+        val rootMsg = root.message?.takeIf { it.isNotBlank() } ?: root.javaClass.simpleName
+        return "播放失败: $rootMsg"
     }
 
     companion object {

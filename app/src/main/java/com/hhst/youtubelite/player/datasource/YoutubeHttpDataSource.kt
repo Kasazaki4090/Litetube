@@ -84,6 +84,7 @@ class YoutubeHttpDataSource private constructor(
         bytesToRead = 0
         windowRead = 0
         activePlan = planResolver?.invoke(dataSpec.uri.toString()) ?: inheritedPlan ?: mediaRequests?.plan(dataSpec.uri.toString())
+            ?: if (dataSpec.uri.path?.contains("videoplayback") == true) com.hhst.youtubelite.extractor.buildRequestPlan(dataSpec.uri.toString()) else null
         rangeQueryApplied = false
         transferInitializing(dataSpec)
 
@@ -110,9 +111,22 @@ class YoutubeHttpDataSource private constructor(
 
         responseCode = resp.code
         val responseMessage = resp.message
+        Log.i(
+            TAG,
+            "OPEN code=$responseCode cl=${resp.header("Content-Length")} cr=${resp.header("Content-Range")} " +
+                "reqRange=${resp.request.header("Range")} url=${resp.request.url}",
+        )
 
         if (responseCode !in 200..299) {
             val headers = resp.headers.toMultimap()
+            val errBody = runCatching { resp.peekBody(1024).string() }.getOrNull()
+            Log.w(
+                TAG,
+                "HTTP $responseCode errBody='$errBody' host=${resp.request.url.host} " +
+                    "path=${resp.request.url.encodedPath} c=${resp.request.url.queryParameter("c")} " +
+                    "rangeParam=$rangeParameterEnabled rnParam=$rnParameterEnabled " +
+                    "pos=${dataSpec.position} len=${dataSpec.length} headers=${resp.headers}",
+            )
             if (responseCode == 416) {
                 val documentSize = HttpUtil.getDocumentSize(resp.header("Content-Range"))
                 if (dataSpec.position == documentSize) {
@@ -124,15 +138,6 @@ class YoutubeHttpDataSource private constructor(
             }
             resp.close()
             closeQuietly()
-            if (responseCode == 403) {
-                Log.w(
-                    TAG,
-                    "HTTP 403 host=${resp.request.url.host} path=${resp.request.url.encodedPath} " +
-                        "c=${resp.request.url.queryParameter("c")} " +
-                        "rangeParam=$rangeParameterEnabled rnParam=$rnParameterEnabled " +
-                        "pos=${dataSpec.position} len=${dataSpec.length}",
-                )
-            }
             val cause = if (responseCode == 416) {
                 DataSourceException(PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE)
             } else null
@@ -241,6 +246,7 @@ class YoutubeHttpDataSource private constructor(
 
     private fun makeConnection(spec: DataSpec): Response {
         val boundPlan = planResolver?.invoke(spec.uri.toString()) ?: inheritedPlan ?: mediaRequests?.plan(spec.uri.toString())
+            ?: if (spec.uri.path?.contains("videoplayback") == true) com.hhst.youtubelite.extractor.buildRequestPlan(spec.uri.toString()) else null
         if (boundPlan != null) return execute(spec.uri.toString(), spec.httpMethod, spec.position, spec.length,
             spec.isFlagSet(DataSpec.FLAG_ALLOW_GZIP), spec.httpRequestHeaders)
         var url = spec.uri.toString()
@@ -300,11 +306,13 @@ class YoutubeHttpDataSource private constructor(
     ): Response {
         if (mediaRequests != null) {
             val plan = planResolver?.invoke(url) ?: inheritedPlan ?: mediaRequests.plan(url)
+                ?: if (url.contains("/videoplayback")) com.hhst.youtubelite.extractor.buildRequestPlan(url) else null
             if (plan != null) {
                 activePlan = plan
                 val range = when {
-                    rangeParameterEnabled && url.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> RequestPlan.Range.QUERY
+                    plan.profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5 -> RequestPlan.Range.HEADER
                     plan.range != RequestPlan.Range.NONE -> plan.range
+                    rangeParameterEnabled && url.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> RequestPlan.Range.QUERY
                     position > 0 || length >= 0 -> RequestPlan.Range.HEADER
                     else -> plan.range
                 }
@@ -346,6 +354,7 @@ class YoutubeHttpDataSource private constructor(
     }
 
     private fun executeCall(request: Request): Response {
+        Log.i(TAG, "executeCall: ${request.method} ${request.url} headers=${request.headers}")
         val diagnostic = dataSpec?.customData as? DiagnosticContext
         val tagged = if (diagnostic != null) DiagnosticNetwork.tag(request, diagnostic) else request
         val call = callFactory.newCall(tagged)
@@ -382,7 +391,14 @@ class YoutubeHttpDataSource private constructor(
         if (count <= 0) return C.RESULT_END_OF_INPUT
         val read = stream.read(buffer, offset, count)
         if (read == -1) {
-            if (expectedWindow >= 0 && windowRead < expectedWindow || bytesToRead != LENGTH_UNSET && bytesRead < bytesToRead) throw IOException("MEDIA_EARLY_EOF")
+            if (expectedWindow >= 0 && windowRead < expectedWindow || bytesToRead != LENGTH_UNSET && bytesRead < bytesToRead) {
+                Log.w(
+                    TAG,
+                    "MEDIA_EARLY_EOF windowRead=$windowRead expectedWindow=$expectedWindow " +
+                        "bytesRead=$bytesRead bytesToRead=$bytesToRead count=$count length=$length",
+                )
+                throw IOException("MEDIA_EARLY_EOF")
+            }
             return C.RESULT_END_OF_INPUT
         }
         bytesRead += read
