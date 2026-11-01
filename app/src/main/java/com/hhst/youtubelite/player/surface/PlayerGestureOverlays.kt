@@ -242,7 +242,8 @@ private fun ScrubBubbleOverlay(state: GestureUi.Scrub, modifier: Modifier = Modi
 @Composable
 private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = Modifier) {
     val icon = if (state.volume) R.drawable.ic_volume else R.drawable.ic_brightness
-    val percent = state.percent.coerceIn(0, 100)
+    val isAuto = !state.volume && state.percent < 0
+    val percent = if (isAuto) 0 else state.percent.coerceIn(0, 100)
     val fill = percent / 100f
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
         val trackHeight = (maxHeight * 0.26f).coerceIn(48.dp, 112.dp)
@@ -257,7 +258,7 @@ private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = 
             Icon(
                 painter = painterResource(icon),
                 contentDescription = null,
-                tint = if (percent > 0) Color.White else Color.White.copy(alpha = 0.4f),
+                tint = if (isAuto || percent > 0) Color.White else Color.White.copy(alpha = 0.4f),
                 modifier = Modifier.size(18.dp),
             )
             Box(
@@ -278,7 +279,7 @@ private fun EdgeSliderOverlay(state: GestureUi.EdgeSlider, modifier: Modifier = 
                 )
             }
             Text(
-                text = "$percent%",
+                text = if (isAuto) stringResource(R.string.player_quality_auto) else "$percent%",
                 color = Color.White,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,

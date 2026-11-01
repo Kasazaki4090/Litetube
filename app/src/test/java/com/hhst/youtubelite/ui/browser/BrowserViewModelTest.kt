@@ -50,6 +50,8 @@ class BrowserViewModelTest {
             override fun putLong(key: String, value: Long) {
                 version = value
             }
+            override fun getString(key: String, default: String): String = default
+            override fun putString(key: String, value: String) {}
         }
         val manager = ExtensionManager(store).apply {
             setEnabled(PreferenceKeys.ENABLE_IN_APP_MINI_PLAYER, miniEnabled)

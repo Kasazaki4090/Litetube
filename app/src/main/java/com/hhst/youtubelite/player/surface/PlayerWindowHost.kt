@@ -57,16 +57,27 @@ class PlayerWindowHost(
         val lp = window.attributes
         if (brightnessOrigin == null) brightnessOrigin = lp.screenBrightness
         val current = brightnessLevel
-            ?: if (lp.screenBrightness < 0f) 0.5f else lp.screenBrightness
-        val next = GestureMath.accumulateLevel(current, delta, 0.01f, 1f)
-        brightnessLevel = next
-        val snapped = (next * 100f).roundToInt() / 100f
-        if (lastBrightnessSet != snapped) {
-            lp.screenBrightness = snapped
-            window.attributes = lp
-            lastBrightnessSet = snapped
+            ?: if (lp.screenBrightness < 0f) 0.0f else lp.screenBrightness
+        val next = current + delta
+        if (next <= 0f) {
+            brightnessLevel = 0f
+            if (lastBrightnessSet != WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) {
+                lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                window.attributes = lp
+                lastBrightnessSet = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            }
+            edgeSlider(false, -1)
+        } else {
+            val clamped = next.coerceAtMost(1f)
+            brightnessLevel = clamped
+            val snapped = ((clamped * 100f).roundToInt() / 100f).coerceIn(0.01f, 1f)
+            if (lastBrightnessSet != snapped) {
+                lp.screenBrightness = snapped
+                window.attributes = lp
+                lastBrightnessSet = snapped
+            }
+            edgeSlider(false, (snapped * 100f).roundToInt())
         }
-        edgeSlider(false, GestureMath.levelPercent(next, 1f))
     }
 
     override fun onVolume(delta: Float) {

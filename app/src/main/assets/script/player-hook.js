@@ -487,14 +487,32 @@
         } catch {}
         window.__liteSyncing = true;
         p.seekTo(target, true);
-        p.playVideo?.();
+        if (!isEnd) {
+          p.playVideo?.();
+        }
         try {
           if (isEnd) sessionStorage?.setItem?.(sessionKey, 'true');
         } catch {}
         setTimeout(() => {
-          try { p.pauseVideo?.(); } finally { window.__liteSyncing = false; }
-        }, isEnd ? 500 : 300);
+          try {
+            p.pauseVideo?.();
+            const v = p.querySelector?.('video');
+            v?.pause?.();
+          } finally {
+            window.__liteSyncing = false;
+          }
+        }, isEnd ? 100 : 300);
       }
+    } catch {}
+  };
+
+  window.__pauseAllWebVideos = function () {
+    try {
+      document.querySelectorAll('video').forEach(v => {
+        try { v.pause?.(); } catch {}
+      });
+      const p = pagePlayer();
+      p?.pauseVideo?.();
     } catch {}
   };
 

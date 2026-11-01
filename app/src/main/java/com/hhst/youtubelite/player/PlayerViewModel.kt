@@ -858,7 +858,10 @@ class PlayerViewModel(
      */
     override fun onSubtitle(trackKey: String?) {
         haptics?.perform(HapticsController.Event.SELECTION)
-        if (trackKey == null) return
+        if (trackKey == null) {
+            engine.setSubtitle(null)
+            return
+        }
         val current = _uiState.value
         val off = current.subtitleEnabled && current.subtitleKey == trackKey
         val applied = engine.setSubtitle(if (off) null else trackKey)

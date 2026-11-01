@@ -119,6 +119,10 @@
         const segs = u.pathname.split('/').filter(Boolean);
         return segs[0] || null;
       }
+      if (u.pathname.startsWith('/live/') || u.pathname.startsWith('/shorts/')) {
+        const segs = u.pathname.split('/').filter(Boolean);
+        return segs[1] || null;
+      }
       return u.searchParams.get('v') || null;
     } catch (e) {
       return null;
@@ -201,6 +205,7 @@
       if (card && card.querySelector) {
         const a = card.querySelector(
           'a[href*="/watch"], a[href^="/watch"], a[href*="/shorts/"], a[href^="/shorts/"], ' +
+          'a[href*="/live/"], a[href^="/live/"], ' +
           'a.ytLockupViewModelContentImage, a.ytmVideoPreviewNavigationEndpoint, a[href]'
         );
         if (a) return a.getAttribute?.('href') || a.href;

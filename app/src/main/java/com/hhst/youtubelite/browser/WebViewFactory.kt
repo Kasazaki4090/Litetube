@@ -218,8 +218,12 @@ object WebViewFactory {
                     'html:not([dark]) ytm-home-logo [fill="currentColor"], ' +
                     'html:not([dark]) ytm-home-logo g[fill="currentColor"] { ' +
                     'fill: #030303 !important; } ' +
-                    'html:not([dark]) ytm-home-logo svg path:not(#rectangle):not([fill*="#FF00"]):not([fill*="#ff00"]):not([fill="#f00"]):not([fill="#F00"]) { ' +
+                    'html:not([dark]) ytm-home-logo [id*="youtube-paths"] path, ' +
+                    'html:not([dark]) ytm-home-logo svg path:not([fill*="#FF00"]):not([fill*="#ff00"]):not([fill*="#FF03"]):not([fill*="#ff03"]):not([fill="#f00"]):not([fill="#F00"]):not([fill="white"]):not([fill="#fff"]):not([fill="#ffffff"]) { ' +
                     'fill: #030303 !important; } ' +
+                    'html:not([dark]) ytm-home-logo svg path[fill="white"], ' +
+                    'html:not([dark]) ytm-home-logo svg path[fill="#fff"], ' +
+                    'html:not([dark]) ytm-home-logo svg path[fill="#ffffff"], ' +
                     'html:not([dark]) ytm-home-logo svg polygon { ' +
                     'fill: #ffffff !important; }';
                   var chatBox = document.getElementById('live_chat_container');
@@ -312,7 +316,16 @@ object WebViewFactory {
             setProgressViewOffset(true, 24, 96)
         }
         val downloadBridge = DownloadWebBridge(appContext = appContext, tabId = tabId)
-        val webView = WebView(context).apply {
+        val webView = object : WebView(context) {
+            override fun setKeepScreenOn(keepScreenOn: Boolean) {
+                // Chromium internal AwContents/WakeLock tries to set keepScreenOn(true)
+                // when web players/wake locks are triggered in m.youtube.com.
+                // Litube uses native ExoPlayer exclusively for playback, so the
+                // WebView must never hold the screen awake.
+                super.setKeepScreenOn(false)
+            }
+        }.apply {
+            keepScreenOn = false
             BrowserDiagnostics.register(this, bridge::diagnosticContext)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,

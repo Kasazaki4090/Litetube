@@ -260,7 +260,11 @@ class PlaybackEngine(
 ) : PlaybackApi {
 
     private val appContext = context.applicationContext
-    private val trackSelector = DefaultTrackSelector(context, StartCappedSelectionFactory())
+    private val trackSelector = DefaultTrackSelector(context, StartCappedSelectionFactory()).apply {
+        parameters = buildUponParameters()
+            .setSelectUndeterminedTextLanguage(true)
+            .build()
+    }
 
     private val player: ExoPlayer = ExoPlayer.Builder(context)
         .setRenderersFactory(DefaultRenderersFactory(context).setEnableDecoderFallback(true))
@@ -308,6 +312,8 @@ class PlaybackEngine(
     @Volatile private var muxedFallbackActive = false
     /** Audio format of the attached source; the match key for cast switching and track recovery. */
     private var lastAudioFormat: Format? = null
+    /** Subtitle track currently merged into the active MediaSource. */
+    private var attachedSubtitleKey: String? = null
     /** Video formats of the current adaptive manifest; empty when non-adaptive. */
     private var adaptiveVideoPool: List<Format> = emptyList()
     /** The user's quality pin (menu pick); null = "Auto". */
@@ -466,8 +472,10 @@ class PlaybackEngine(
             override fun onCues(cueGroup: CueGroup) {
                 val texts = cueGroup.cues.mapNotNull { it.text?.toString() }
                     .filter { it.isNotBlank() }
+                Log.i("LiTube_SUB", "onCues: count=${cueGroup.cues.size} texts=$texts")
                 if (texts != _snapshot.value.subtitleCues) {
                     _snapshot.value = _snapshot.value.copy(subtitleCues = texts)
+                    publish()
                 }
             }
 
@@ -479,6 +487,7 @@ class PlaybackEngine(
                 if (castPlayer == null) {
                     updateQualityFromTracks()
                     publishRenditionAudio()
+                    updateSubtitleFromTracks()
                 }
                 publish()
             }
@@ -709,6 +718,7 @@ class PlaybackEngine(
                 rememberedSubtitleKey(),
                 stream.subtitles,
             )
+            attachedSubtitleKey = subKey
             if (subKey != null && resolver.hasSubtitleTrack(stream.subtitles, subKey)) {
                 applySubtitle(subKey)
             }
@@ -1242,38 +1252,81 @@ class PlaybackEngine(
      * remembered key so turning captions back on restores the same track.
      */
     override fun setSubtitle(trackKey: String?): Boolean {
+        val stream = currentStream
+        val metadata = currentMetadata
+        val resolvedKey = if (trackKey != null) {
+            SubtitleSelection.migrate(trackKey, stream?.subtitles.orEmpty())
+        } else null
+
         if (trackKey != null &&
-            !resolver.hasSubtitleTrack(currentStream?.subtitles.orEmpty(), trackKey)
+            (resolvedKey == null || !resolver.hasSubtitleTrack(stream?.subtitles.orEmpty(), resolvedKey))
         ) {
             return false
         }
-        if (trackKey == null) {
+        val targetKey = resolvedKey ?: trackKey
+        if (targetKey == null) {
             cache.put(KEY_SUBTITLE_OFF, "1", PREF_TTL_MS)
-            _snapshot.value = _snapshot.value.copy(subtitleKey = null)
+            applySubtitle(null)
         } else {
             cache.invalidate(KEY_SUBTITLE_OFF)
-            cache.put(KEY_SUBTITLE, trackKey, PREF_TTL_MS)
-            _snapshot.value = _snapshot.value.copy(subtitleKey = trackKey)
+            cache.put(KEY_SUBTITLE, targetKey, PREF_TTL_MS)
+            if (stream != null && metadata != null && targetKey != attachedSubtitleKey) {
+                rebuildAtCurrentPosition(stream, metadata, subtitleKey = targetKey)
+            }
+            applySubtitle(targetKey)
         }
-        val stream = currentStream
-        val metadata = currentMetadata
-        if (stream != null && metadata != null && trackKey != null) {
-            rebuildAtCurrentPosition(stream, metadata, subtitleKey = trackKey)
-        }
-        applySubtitle(trackKey)
         return true
     }
 
     private fun applySubtitle(trackKey: String?) {
-        val iso = trackKey?.let { SubtitleSelection.languageOf(it) }
-        trackSelector.parameters = trackSelector.parameters.buildUpon()
-            .setPreferredTextLanguage(iso)
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, trackKey == null)
-            .build()
+        val builder = trackSelector.parameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+        if (trackKey == null) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        } else {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            val match = findTextTrackGroup(trackKey)
+            Log.i("LiTube_SUB", "applySubtitle: trackKey=$trackKey match=$match")
+            if (match != null) {
+                builder.setOverrideForType(
+                    TrackSelectionOverride(match.mediaTrackGroup, 0),
+                )
+            }
+        }
+        trackSelector.parameters = builder.build()
         _snapshot.value = _snapshot.value.copy(
             subtitleEnabled = trackKey != null,
             subtitleKey = trackKey,
+            subtitleCues = if (trackKey == null) emptyList() else _snapshot.value.subtitleCues,
         )
+    }
+
+    private fun findTextTrackGroup(trackKey: String): Tracks.Group? {
+        val groups = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+        if (groups.isEmpty()) return null
+        val lang = SubtitleSelection.languageOf(trackKey)
+        return groups.firstOrNull { group ->
+            (0 until group.length).any { i ->
+                val f = group.getTrackFormat(i)
+                f.language?.equals(lang, ignoreCase = true) == true ||
+                    f.id?.contains(lang, ignoreCase = true) == true
+            }
+        } ?: groups.firstOrNull()
+    }
+
+    private fun updateSubtitleFromTracks() {
+        val key = attachedSubtitleKey ?: _snapshot.value.subtitleKey
+        if (key != null) {
+            val textGroup = findTextTrackGroup(key)
+            Log.i("LiTube_SUB", "updateSubtitleFromTracks: key=$key textGroup=$textGroup isSelected=${textGroup?.isSelected}")
+            if (textGroup != null && !textGroup.isSelected) {
+                trackSelector.parameters = trackSelector.parameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(TrackSelectionOverride(textGroup.mediaTrackGroup, 0))
+                    .build()
+            }
+        }
     }
 
     override fun cancelSponsorSkip() {
@@ -1815,12 +1868,18 @@ class PlaybackEngine(
                     }
                 }
                 pinnedQuality = honored
+                attachedSubtitleKey = subtitleKey
+                val subBuilder = trackSelector.parameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, subtitleKey == null)
+                trackSelector.parameters = subBuilder.build()
                 val audioChoices = AudioTrackIdentity.choices(stream.formats)
                 _snapshot.value = _snapshot.value.copy(
                     qualityLabel = honored,
                     audioTrackKey = source.audioFormat?.let { AudioTrackIdentity.key(it) }
                         ?: audioTrackKey,
                     audioTracks = audioChoices,
+                    subtitleEnabled = subtitleKey != null,
                     subtitleKey = subtitleKey,
                     isBuffering = false,
                     error = null,
@@ -1916,13 +1975,16 @@ class PlaybackEngine(
     }
 
     private fun rememberedSubtitleKey(): String? {
-        val preferred = prefs.getString(PreferenceKeys.PREFERRED_SUBTITLE_LANGUAGE, "auto")
-        if (preferred.isNotBlank() && preferred != "auto") {
-            return preferred
-        }
         if (!prefs.isEnabled(PreferenceKeys.REMEMBER_SUBTITLE_LANGUAGE)) return null
         if (cache.get(KEY_SUBTITLE_OFF, String::class.java) != null) return null
-        return cache.get(KEY_SUBTITLE, String::class.java)
+        val cached = cache.get(KEY_SUBTITLE, String::class.java)
+        if (cached != null) return cached
+
+        val preferred = prefs.getString(PreferenceKeys.PREFERRED_SUBTITLE_LANGUAGE, "auto")
+        if (preferred.isNotBlank() && preferred != "off" && preferred != "none") {
+            return preferred
+        }
+        return null
     }
 
     private fun rememberedPosition(videoId: String, durationSec: Long): Long {

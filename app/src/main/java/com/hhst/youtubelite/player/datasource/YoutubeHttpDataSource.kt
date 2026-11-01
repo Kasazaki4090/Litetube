@@ -219,8 +219,15 @@ class YoutubeHttpDataSource private constructor(
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         try {
-            return readInternal(buffer, offset, length)
+            val r = readInternal(buffer, offset, length)
+            if (dataSpec?.uri?.toString()?.contains("timedtext") == true) {
+                Log.i("LiTube_SUB", "read timedtext: result=$r bytesRead=$bytesRead")
+            }
+            return r
         } catch (e: IOException) {
+            if (dataSpec?.uri?.toString()?.contains("timedtext") == true) {
+                Log.e("LiTube_SUB", "read timedtext error", e)
+            }
             throw HttpDataSource.HttpDataSourceException.createForIOException(
                 e, dataSpec!!, HttpDataSource.HttpDataSourceException.TYPE_READ,
             )
@@ -304,28 +311,46 @@ class YoutubeHttpDataSource private constructor(
         allowGzip: Boolean,
         requestParameters: Map<String, String>,
     ): Response {
+        var resolvedUrl = url
+        if (resolvedUrl.contains("/api/timedtext") && !resolvedUrl.contains("&pot=")) {
+            val videoId = android.net.Uri.parse(resolvedUrl).getQueryParameter("v")
+            var params = com.hhst.youtubelite.extractor.AuthContextStore.getTimedtextParams(videoId)
+            if (params == null) {
+                val deadline = System.currentTimeMillis() + 1500L
+                while (params == null && System.currentTimeMillis() < deadline) {
+                    try { Thread.sleep(100) } catch (_: InterruptedException) { break }
+                    params = com.hhst.youtubelite.extractor.AuthContextStore.getTimedtextParams(videoId)
+                }
+            }
+            if (params != null) {
+                resolvedUrl += params
+            }
+            if (!resolvedUrl.contains("fmt=")) {
+                resolvedUrl += "&fmt=vtt"
+            }
+        }
         if (mediaRequests != null) {
-            val plan = planResolver?.invoke(url) ?: inheritedPlan ?: mediaRequests.plan(url)
-                ?: if (url.contains("/videoplayback")) com.hhst.youtubelite.extractor.buildRequestPlan(url) else null
+            val plan = planResolver?.invoke(resolvedUrl) ?: inheritedPlan ?: mediaRequests.plan(resolvedUrl)
+                ?: if (resolvedUrl.contains("/videoplayback")) com.hhst.youtubelite.extractor.buildRequestPlan(resolvedUrl) else null
             if (plan != null) {
                 activePlan = plan
                 val range = when {
                     plan.profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5 -> RequestPlan.Range.HEADER
                     plan.range != RequestPlan.Range.NONE -> plan.range
-                    rangeParameterEnabled && url.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> RequestPlan.Range.QUERY
+                    rangeParameterEnabled && resolvedUrl.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> RequestPlan.Range.QUERY
                     position > 0 || length >= 0 -> RequestPlan.Range.HEADER
                     else -> plan.range
                 }
                 effectiveRange = range
                 rangeQueryApplied = range == RequestPlan.Range.QUERY
-                return executeCall(mediaRequests.build(url, plan, position, length, requestParameters, range))
+                return executeCall(mediaRequests.build(resolvedUrl, plan, position, length, requestParameters, range))
             }
-            val builder = Request.Builder().url(url).header("User-Agent", userAgent)
+            val builder = Request.Builder().url(resolvedUrl).header("User-Agent", userAgent)
             requestParameters.filterKeys { it.lowercase() !in setOf("cookie", "authorization") }.forEach { (k, v) -> builder.header(k, v) }
             HttpUtil.buildRangeRequestHeader(position, length)?.let { builder.header("Range", it) }
             return executeCall(builder.get().build())
         }
-        val builder = Request.Builder().url(url).header("User-Agent", userAgent)
+        val builder = Request.Builder().url(resolvedUrl).header("User-Agent", userAgent)
             .header("Accept-Encoding", if (allowGzip) "gzip" else "identity")
         requestParameters.filterKeys { it.lowercase() !in setOf("authorization", "cookie") }
             .forEach { (k, v) -> builder.header(k, v) }

@@ -21,6 +21,7 @@ import android.view.OrientationEventListener
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -637,6 +638,13 @@ fun BrowserScreen(
             playerState.videoHeight,
         )
         if (!playerState.visible) windowHost.restoreBrightness()
+        if (!playerState.isPlaying && !playerState.loading) {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            hosts.values.forEach { host ->
+                host.webView.keepScreenOn = false
+                host.container.keepScreenOn = false
+            }
+        }
     }
     LaunchedEffect(playerState.visible, activity) {
         if (playerState.visible &&

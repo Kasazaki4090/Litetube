@@ -67,6 +67,13 @@ class Extractor(
                             }
                         }
                     }
+
+                    @JavascriptInterface
+                    fun postTimedtextUrl(url: String?) {
+                        if (!url.isNullOrBlank()) {
+                            AuthContextStore.recordTimedtextUrl(url)
+                        }
+                    }
                 },
                 "NativePlayerCapture"
             )

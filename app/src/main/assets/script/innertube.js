@@ -22,11 +22,44 @@
   }
   function publish(message) {
     try {
-      const generation = window.Bridge?.currentDocumentGeneration?.();
-      if (generation == null || !window.NativePlayerCapture) return;
-      const value = JSON.stringify({ generation, session: window.Bridge?.currentExtractionSession?.(), ...message });
-      if (value.length <= 2 * 1024 * 1024) window.NativePlayerCapture.postMessage(value);
+      const bridge = window.Bridge;
+      const generation = (bridge && typeof bridge.currentDocumentGeneration === 'function')
+        ? bridge.currentDocumentGeneration()
+        : 0;
+      const capture = window.NativePlayerCapture;
+      if (!capture || typeof capture.postMessage !== 'function') return;
+      const session = (bridge && typeof bridge.currentExtractionSession === 'function')
+        ? bridge.currentExtractionSession()
+        : '';
+      const value = JSON.stringify({ generation, session, ...message });
+      if (value.length <= 2 * 1024 * 1024) capture.postMessage(value);
     } catch {}
+  }
+  function checkAndPostTimedtext() {
+    try {
+      const capture = window.NativePlayerCapture;
+      if (!capture || typeof capture.postTimedtextUrl !== 'function') return;
+      const entries = window.performance?.getEntriesByType?.('resource') || [];
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const u = entries[i].name;
+        if (typeof u === 'string' && u.includes('/api/timedtext') && u.includes('pot=')) {
+          capture.postTimedtextUrl(u);
+        }
+      }
+    } catch {}
+  }
+  function triggerCaptions() {
+    try {
+      const p = document.getElementById('movie_player');
+      if (p) {
+        p.loadModule?.('captions');
+        const tracks = p.getOption?.('captions', 'tracklist');
+        if (tracks && tracks.length > 0) {
+          p.setOption?.('captions', 'track', tracks[0]);
+        }
+      }
+    } catch {}
+    checkAndPostTimedtext();
   }
   let lastPublishedInitialId = null;
   function captureInitialPlayerResponse() {
@@ -36,11 +69,9 @@
       if (!videoId || videoId === lastPublishedInitialId) return;
       if (player?.playabilityStatus?.status !== 'OK' || !player?.streamingData) return;
       lastPublishedInitialId = videoId;
-      const config = configuration();
-      if (config) {
-        config._IS_LIVE = player.videoDetails?.isLiveContent === true;
-        config._VIDEO_ID = videoId;
-      }
+      const config = configuration() || {};
+      config._IS_LIVE = player.videoDetails?.isLiveContent === true;
+      config._VIDEO_ID = videoId;
       publish({
         request: JSON.stringify({ videoId, context: { client: { clientName: 'MWEB' } } }),
         response: JSON.stringify(player),
@@ -51,6 +82,20 @@
   function captureConfiguration() {
     publish({ configuration: configuration() });
     captureInitialPlayerResponse();
+    triggerCaptions();
+    [200, 600, 1500, 3000].forEach(delay => setTimeout(triggerCaptions, delay));
+  }
+  if (!window.__xhrTimedtextHooked) {
+    window.__xhrTimedtextHooked = true;
+    const origOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url) {
+      try {
+        if (typeof url === 'string' && url.includes('/api/timedtext') && url.includes('pot=')) {
+          window.NativePlayerCapture?.postTimedtextUrl?.(url);
+        }
+      } catch {}
+      return origOpen.apply(this, arguments);
+    };
   }
   captureConfiguration();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', captureConfiguration, { once: true });
@@ -60,8 +105,6 @@
     const method = String(init?.method || input?.method || 'GET').toUpperCase();
     if (method !== 'POST' || !url.includes('/youtubei/v1/player')) return originalFetch(input, init);
     // Start the original immediately; observe clones without replacing browser responses.
-    const generation = window.Bridge?.currentDocumentGeneration?.();
-    const session = window.Bridge?.currentExtractionSession?.();
     const raw = init?.body;
     const requestText = typeof raw === 'string' ? Promise.resolve(raw)
       : raw instanceof Uint8Array || raw instanceof ArrayBuffer ? Promise.resolve(new TextDecoder().decode(raw))
@@ -71,15 +114,18 @@
       requestText.then(text => {
         if (!text) return;
         if (response.status === 200) response.clone().text().then(body => {
-          if (generation === window.Bridge?.currentDocumentGeneration?.()) {
+          try {
             const player = JSON.parse(body);
-            const config = configuration();
-            if (config && player.videoDetails) {
+            const config = configuration() || {};
+            if (player?.videoDetails?.videoId) {
               config._IS_LIVE = player.videoDetails.isLiveContent === true;
               config._VIDEO_ID = player.videoDetails.videoId;
             }
+            const session = window.Bridge && typeof window.Bridge.currentExtractionSession === 'function'
+              ? window.Bridge.currentExtractionSession()
+              : '';
             publish({ session, request: text, response: body, configuration: config });
-          }
+          } catch (_) {}
         }).catch(() => {});
       }).catch(() => {});
       return response;

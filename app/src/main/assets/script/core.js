@@ -4,6 +4,11 @@
  */
 (() => {
   'use strict';
+  try {
+    if (navigator.wakeLock) {
+      navigator.wakeLock.request = () => Promise.reject(new DOMException('WakeLock disabled', 'NotAllowedError'));
+    }
+  } catch (_) {}
   if (window.Lite) return;
 
   const VIEW_BOX = '0 -960 960 960';

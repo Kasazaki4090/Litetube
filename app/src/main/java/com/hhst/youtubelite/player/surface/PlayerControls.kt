@@ -141,6 +141,7 @@ fun TopBar(
     callbacks: PlayerSurfaceCallbacks? = null,
     onCast: () -> Unit = {},
     onSubtitleStyle: () -> Unit = {},
+    onSubtitleLongClick: () -> Unit = onSubtitleStyle,
     showAuthor: Boolean = true,
     compactBottom: Boolean = false,
     sizing: PlayerUi.ChromeSizing = PlayerUi.CompactChromeSizing,
@@ -237,7 +238,7 @@ fun TopBar(
                         onClick = onSubtitle,
                         modifier = Modifier.width(40.dp),
                         iconSize = sizing.iconDp,
-                        onLongClick = onSubtitleStyle,
+                        onLongClick = onSubtitleLongClick,
                         tint = if (state.subtitleEnabled) PlayerUi.YtRed else PlayerUi.Icon,
                     )
                     if (menu == PlayerAnchorMenu.Subtitles && callbacks != null) {

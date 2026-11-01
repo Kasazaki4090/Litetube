@@ -160,6 +160,12 @@ class YoutubeMediaRequests(
 
     /** Shared range interpretation for player, download and proxy, including query-cropped views. */
     fun window(response: Response, plan: RequestPlan): Window {
+        val isLive = response.request.url.encodedPath.contains("yt_live_broadcast") ||
+            response.request.url.toString().contains("playlist_type/LIVE") ||
+            response.request.url.queryParameter("live") == "1"
+        if (isLive && response.code in 200..299 && response.header("Content-Range") == null) {
+            return Window(response.body?.contentLength() ?: -1L, null)
+        }
         val query = response.request.url.queryParameter("range")
         val raw = query ?: response.request.header("Range")?.removePrefix("bytes=")
             ?: if (plan.range == RequestPlan.Range.NONE) return Window(response.body?.contentLength() ?: -1, null)

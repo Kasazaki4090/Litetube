@@ -1,8 +1,10 @@
 package com.hhst.youtubelite.player.surface
 
+import android.app.Activity
 import android.os.Build
 import android.view.Gravity
 import android.view.SurfaceView
+import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -260,9 +262,17 @@ fun PlayerSurface(
         }
     }
 
+    val window = (view.context as? Activity)?.window
     DisposableEffect(state.isPlaying, state.loading, state.casting) {
-        view.keepScreenOn = !state.casting && (state.isPlaying || state.loading)
-        onDispose { view.keepScreenOn = false }
+        val keepOn = !state.casting && (state.isPlaying || state.loading)
+        view.keepScreenOn = keepOn
+        if (!keepOn) {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            view.keepScreenOn = false
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     BoxWithConstraints(
@@ -398,6 +408,7 @@ fun PlayerSurface(
                     Box(Modifier.fillMaxSize()) {
                         ControlScrims()
                         Box(Modifier.fillMaxSize().then(sidePad)) {
+                            val noSubtitlesText = stringResource(R.string.no_subtitles)
                             TopBar(
                                 state = state,
                                 positionState = positionState,
@@ -407,7 +418,16 @@ fun PlayerSurface(
                                 onSegments = { menu = PlayerAnchorMenu.Segments },
                                 onLoop = callbacks::onLoop,
                                 onMore = { sheet = PlayerSheet.More },
-                                onSubtitle = { menu = PlayerAnchorMenu.Subtitles },
+                                onSubtitle = {
+                                    if (state.subtitleTracks.isEmpty()) {
+                                        callbacks.onHint(noSubtitlesText)
+                                    } else if (state.subtitleEnabled) {
+                                        callbacks.onSubtitle(null)
+                                    } else {
+                                        callbacks.onSubtitle(state.subtitleKey ?: "auto")
+                                    }
+                                },
+                                onSubtitleLongClick = { menu = PlayerAnchorMenu.Subtitles },
                                 onSubtitleStyle = { dialog = PlayerDialog.SubtitleStyle },
                                 onCast = { dialog = PlayerDialog.Cast },
                                 onDismissMenu = { menu = null },
