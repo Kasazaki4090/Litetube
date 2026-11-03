@@ -7,6 +7,8 @@ import android.view.SurfaceView
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -296,6 +298,11 @@ fun PlayerSurface(
             chromeSizing.textSp) && maxHeight < 280.dp
         val centerHeightDp = maxHeight.value - with(density) { (topBarHeightPx + bottomBarHeightPx).toDp().value }
         val showChromeAuthor = maxHeight >= 280.dp || density.fontScale < 1.3f
+        val subtitleBaseFontSp = PlayerUi.subtitleBaseFontSp(
+            maxWidth.value - chromeLeft - chromeRight,
+            maxHeight.value,
+        )
+        val subtitleRestingClearDp = PlayerUi.subtitleClearDp(maxHeight.value)
         Box(
             Modifier
                 .fillMaxSize()
@@ -463,6 +470,8 @@ fun PlayerSurface(
                         style = state.subtitleStyle,
                         chromeBottomClearDp = maxOf(PlayerUi.SUBTITLE_CHROME_CLEAR_DP.toFloat(),
                             with(density) { bottomBarHeightPx.toDp().value } + 8f),
+                        baseFontSp = subtitleBaseFontSp,
+                        restingClearDp = subtitleRestingClearDp,
                     )
 
                     AnimatedVisibility(
@@ -620,20 +629,49 @@ private fun SubtitleCuesLayer(
     showChrome: Boolean,
     style: SubtitleStyle,
     chromeBottomClearDp: Float,
+    baseFontSp: Float = PlayerUi.BASE_SUBTITLE_FONT_SP,
+    restingClearDp: Float = PlayerUi.SUBTITLE_CLEAR_DP.toFloat(),
 ) {
     val cues = cuesState.value
     if (cues.isEmpty()) return
+
+    // Clear bottom chrome only when subtitles are positioned in the bottom area.
+    // Clear top chrome only when subtitles are positioned in the top area.
+    val needsBottomClear = style.vertical >= 0.6f
+    val needsTopClear = style.vertical <= 0.4f
+
+    val targetBottomClear = when {
+        showChrome && needsBottomClear -> chromeBottomClearDp.dp
+        else -> restingClearDp.dp
+    }
+    val targetTopClear = when {
+        showChrome && needsTopClear -> PlayerUi.SUBTITLE_CHROME_CLEAR_DP.dp
+        else -> restingClearDp.dp
+    }
+
+    val bottomClearance by animateDpAsState(
+        targetValue = targetBottomClear,
+        animationSpec = tween(durationMillis = 200),
+        label = "subtitleBottomClear",
+    )
+    val topClearance by animateDpAsState(
+        targetValue = targetTopClear,
+        animationSpec = tween(durationMillis = 200),
+        label = "subtitleTopClear",
+    )
+
     Box(
         Modifier
             .fillMaxSize()
             .padding(
-                top = if (showChrome) PlayerUi.SUBTITLE_CHROME_CLEAR_DP.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
-                bottom = if (showChrome) chromeBottomClearDp.dp else PlayerUi.SUBTITLE_CLEAR_DP.dp,
+                top = topClearance,
+                bottom = bottomClearance,
             ),
     ) {
         SubtitleOverlay(
             cues = cues,
             style = style,
+            baseFontSp = baseFontSp,
             modifier = Modifier
                 .align(
                     BiasAlignment(

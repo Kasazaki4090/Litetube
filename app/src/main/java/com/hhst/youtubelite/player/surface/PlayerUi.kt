@@ -54,6 +54,9 @@ object PlayerUi {
     /** Subtitle block bottom clearance: extra when the chrome is visible. */
     const val SUBTITLE_CHROME_CLEAR_DP = 52
     const val SUBTITLE_CLEAR_DP = 12
+    const val BASE_SUBTITLE_FONT_SP = 14f
+    const val MIN_SUBTITLE_FONT_SP = 8.5f
+    const val MAX_SUBTITLE_FONT_SP = 26f
     /** Top hint inset; grows to clear the cast / link banner when shown. */
     const val HINT_TOP_PAD_DP = 4
     const val CAST_BANNER_CLEAR_DP = 44
@@ -105,6 +108,31 @@ object PlayerUi {
         fun between(small: Int, large: Int) = (small + (large - small) * room).roundToInt()
         return ChromeSizing(between(24, 32), between(13, 16), between(56, CENTER_PLAY_DP),
             between(48, CENTER_SKIP_DP), (widthDp * .08f).roundToInt().coerceIn(12, 84))
+    }
+
+    /**
+     * Scales subtitle base font size to the player slot dimensions so captions remain
+     * readable and well-proportioned in PiP (~8.5-9.5 sp), embedded half-screen (~14 sp),
+     * and fullscreen landscape (~20-22 sp on phones, up to 26 sp on tablets).
+     */
+    fun subtitleBaseFontSp(widthDp: Float, heightDp: Float): Float {
+        if (widthDp <= 0f || heightDp <= 0f) return BASE_SUBTITLE_FONT_SP
+        val refHeight = minOf(heightDp, widthDp * (9f / 16f))
+        return when {
+            refHeight <= 90f -> MIN_SUBTITLE_FONT_SP
+            refHeight < 200f -> MIN_SUBTITLE_FONT_SP + (refHeight - 90f) * ((BASE_SUBTITLE_FONT_SP - MIN_SUBTITLE_FONT_SP) / 110f)
+            refHeight <= 420f -> BASE_SUBTITLE_FONT_SP + (refHeight - 200f) * (7.5f / 220f)
+            else -> (21.5f + (refHeight - 420f) * 0.02f).coerceAtMost(MAX_SUBTITLE_FONT_SP)
+        }
+    }
+
+    /**
+     * Baseline clearance for subtitles from the video edge. Scales down in tiny windows (PiP)
+     * to avoid wasting vertical space, while preserving 12 dp in embedded and fullscreen.
+     */
+    fun subtitleClearDp(heightDp: Float): Float {
+        if (heightDp <= 0f) return SUBTITLE_CLEAR_DP.toFloat()
+        return (heightDp * 0.06f).coerceIn(6f, SUBTITLE_CLEAR_DP.toFloat())
     }
 
     /**

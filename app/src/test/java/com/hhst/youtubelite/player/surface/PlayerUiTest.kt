@@ -198,4 +198,43 @@ class PlayerUiTest {
         assertEquals("", PlayerUi.languageLabel(""))
         assertTrue(PlayerUi.languageLabel("en").isNotBlank())
     }
+
+    @Test
+    fun subtitleBaseFontSp_scalesWithDimensions() {
+        // PiP is clamped to MIN_SUBTITLE_FONT_SP (8.5 sp) so it never covers the screen.
+        assertEquals(8.5f, PlayerUi.subtitleBaseFontSp(160f, 90f), 0.01f)
+        assertEquals(8.5f, PlayerUi.subtitleBaseFontSp(120f, 67.5f), 0.01f)
+
+        // Embedded portrait 16:9 sits near the 14 sp design baseline.
+        assertEquals(14.08f, PlayerUi.subtitleBaseFontSp(360f, 202.5f), 0.05f)
+        assertEquals(15.08f, PlayerUi.subtitleBaseFontSp(412f, 231.75f), 0.05f)
+
+        // Landscape phone scales up for readability (~20-22 sp).
+        assertEquals(20.82f, PlayerUi.subtitleBaseFontSp(800f, 400f), 0.05f)
+        assertEquals(21.23f, PlayerUi.subtitleBaseFontSp(900f, 412f), 0.05f)
+
+        // Tablet landscape is capped at MAX_SUBTITLE_FONT_SP (26 sp).
+        assertEquals(26.0f, PlayerUi.subtitleBaseFontSp(1200f, 800f), 0.01f)
+
+        // Tall narrow player uses video reference height (180 dp for 320 width), not container height.
+        assertEquals(13.0f, PlayerUi.subtitleBaseFontSp(320f, 400f), 0.01f)
+
+        // Non-positive dimensions fall back to BASE_SUBTITLE_FONT_SP (14 sp).
+        assertEquals(14.0f, PlayerUi.subtitleBaseFontSp(0f, 0f), 0.01f)
+        assertEquals(14.0f, PlayerUi.subtitleBaseFontSp(-10f, 200f), 0.01f)
+    }
+
+    @Test
+    fun subtitleClearDp_scalesInPiP() {
+        // In PiP (height <= 90 dp), clear margin scales down to 6 dp to hug the edge.
+        assertEquals(6.0f, PlayerUi.subtitleClearDp(90f), 0.01f)
+        assertEquals(6.0f, PlayerUi.subtitleClearDp(60f), 0.01f)
+
+        // Embedded and fullscreen preserve the full 12 dp margin.
+        assertEquals(12.0f, PlayerUi.subtitleClearDp(200f), 0.01f)
+        assertEquals(12.0f, PlayerUi.subtitleClearDp(400f), 0.01f)
+
+        // Invalid heights fall back to 12 dp.
+        assertEquals(12.0f, PlayerUi.subtitleClearDp(0f), 0.01f)
+    }
 }

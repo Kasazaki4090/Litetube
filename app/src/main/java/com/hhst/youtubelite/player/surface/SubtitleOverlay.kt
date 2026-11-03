@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /** Base cue look (material bodyMedium); [SubtitleStyle.textScale] multiplies it. */
-private const val BASE_FONT_SP = 14f
+const val BASE_FONT_SP = PlayerUi.BASE_SUBTITLE_FONT_SP
 
 /** Background alpha per [SubtitleStyle.Background] style. */
 private fun SubtitleStyle.Background.alpha(): Float = when (this) {
@@ -30,20 +30,25 @@ private fun SubtitleStyle.Background.alpha(): Float = when (this) {
  * [SubtitleStyle.verticalBias] / [SubtitleStyle.horizontal].
  * Each cue line hugs its own background; the column is width-constrained by
  * the caller so long lines wrap instead of running off-screen.
+ *
+ * [baseFontSp] is scaled to the player dimensions (PiP ~8.5 sp, embedded ~14 sp,
+ * fullscreen ~21 sp) so captions scale proportionally to the video.
  */
 @Composable
 fun SubtitleOverlay(
     cues: List<String>,
     style: SubtitleStyle = SubtitleStyle(),
+    baseFontSp: Float = BASE_FONT_SP,
     modifier: Modifier = Modifier,
 ) {
-    val fontSp = BASE_FONT_SP * style.textScale
+    val fontSp = baseFontSp * style.textScale
+    val scaleRatio = (fontSp / BASE_FONT_SP).coerceIn(0.5f, 2.5f)
     val bgAlpha = style.background.alpha()
     val textColor = Color(style.colorArgb)
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp * style.textScale),
+        verticalArrangement = Arrangement.spacedBy((2.dp * style.textScale * scaleRatio).coerceAtLeast(1.dp)),
     ) {
         cues.forEach { line ->
             Text(
@@ -55,14 +60,17 @@ fun SubtitleOverlay(
                 modifier = Modifier
                     .then(
                         if (bgAlpha > 0f) {
-                            Modifier.background(Color.Black.copy(alpha = bgAlpha), RoundedCornerShape(4.dp))
+                            Modifier.background(
+                                Color.Black.copy(alpha = bgAlpha),
+                                RoundedCornerShape((4.dp * scaleRatio).coerceAtLeast(2.dp)),
+                            )
                         } else {
                             Modifier
                         },
                     )
                     .padding(
-                        horizontal = 8.dp * style.textScale,
-                        vertical = 2.dp * style.textScale,
+                        horizontal = (8.dp * style.textScale * scaleRatio).coerceAtLeast(4.dp),
+                        vertical = (2.dp * style.textScale * scaleRatio).coerceAtLeast(1.dp),
                     ),
             )
         }
