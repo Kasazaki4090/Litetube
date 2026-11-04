@@ -5,17 +5,40 @@
   const originalFetch = window.fetch.bind(window);
   const fields = ['INNERTUBE_CONTEXT', 'INNERTUBE_API_KEY', 'SESSION_INDEX', 'DATASYNC_ID',
     'DELEGATED_SESSION_ID', 'USER_SESSION_ID', 'VISITOR_DATA', 'LOGGED_IN', 'IS_PREMIUM',
-    'PLAYER_JS_URL', 'WEB_PLAYER_CONTEXT_CONFIGS', 'EXPERIMENT_FLAGS', 'EXPERIMENTS_FORCED_FLAGS', 'EVENT_ID'];
+    'PLAYER_JS_URL', 'WEB_PLAYER_CONTEXT_CONFIGS', 'EXPERIMENT_FLAGS', 'EXPERIMENTS_FORCED_FLAGS', 'EVENT_ID',
+    'INNERTUBE_CLIENT_VERSION'];
+  function extractPoTokenFromPlayer(player) {
+    try {
+      const formats = [
+        ...(player?.streamingData?.formats || []),
+        ...(player?.streamingData?.adaptiveFormats || []),
+      ];
+      for (const f of formats) {
+        const u = f?.url;
+        if (typeof u === 'string' && u.includes('pot=')) {
+          const m = u.match(/[?&]pot=([^&]+)/);
+          if (m && m[1]) return decodeURIComponent(m[1]);
+        }
+      }
+    } catch {}
+    return null;
+  }
   function configuration() {
     const source = window.ytcfg?.data_;
     if (!source) return null;
     const result = {};
     for (const name of fields) if (source[name] != null) result[name] = source[name];
+    if (!result.INNERTUBE_CLIENT_VERSION) {
+      result.INNERTUBE_CLIENT_VERSION = source.INNERTUBE_CONTEXT_CLIENT_VERSION
+        || source.INNERTUBE_CONTEXT?.client?.clientVersion;
+    }
     if (!result.PLAYER_JS_URL) {
       result.PLAYER_JS_URL = Object.values(result.WEB_PLAYER_CONTEXT_CONFIGS || {}).find(c => c?.jsUrl)?.jsUrl;
     }
     result._IS_LIVE = window.ytInitialPlayerResponse?.videoDetails?.isLiveContent === true;
     result._VIDEO_ID = window.ytInitialPlayerResponse?.videoDetails?.videoId;
+    const pot = extractPoTokenFromPlayer(window.ytInitialPlayerResponse);
+    if (pot) result._PO_TOKEN = pot;
     const logo = window.ytInitialData?.topbar?.desktopTopbarRenderer?.logo?.topbarLogoRenderer;
     if (logo?.iconImage?.iconType === 'YOUTUBE_PREMIUM_LOGO' || /premium/i.test(logo?.tooltip || '')) result.IS_PREMIUM = true;
     return result;
@@ -121,6 +144,8 @@
               config._IS_LIVE = player.videoDetails.isLiveContent === true;
               config._VIDEO_ID = player.videoDetails.videoId;
             }
+            const pot = extractPoTokenFromPlayer(player);
+            if (pot) config._PO_TOKEN = pot;
             const session = window.Bridge && typeof window.Bridge.currentExtractionSession === 'function'
               ? window.Bridge.currentExtractionSession()
               : '';

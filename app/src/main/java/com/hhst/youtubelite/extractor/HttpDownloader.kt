@@ -36,6 +36,16 @@ internal object AuthContextStore {
     var loggedIn: Boolean = false
         private set
 
+    @Volatile
+    var clientVersion: String? = null
+        private set
+
+    @Volatile
+    var latestPoToken: String? = null
+        private set
+
+    private val poTokensByVideo = ConcurrentHashMap<String, String>()
+
     private data class BrowserPlayerEntry(
         val body: String,
         val capturedAtMs: Long,
@@ -48,11 +58,24 @@ internal object AuthContextStore {
         dataSyncId: String?,
         sessionIndex: String?,
         loggedIn: Boolean,
+        clientVersion: String? = null,
+        poToken: String? = null,
     ) {
         if (!visitorData.isNullOrBlank()) this.visitorData = visitorData.trim()
         if (!dataSyncId.isNullOrBlank()) this.dataSyncId = dataSyncId.trim()
         if (!sessionIndex.isNullOrBlank()) this.sessionIndex = sessionIndex.trim()
+        if (!clientVersion.isNullOrBlank()) this.clientVersion = clientVersion.trim()
+        if (!poToken.isNullOrBlank()) this.latestPoToken = poToken.trim()
         this.loggedIn = loggedIn
+    }
+
+    fun hasPoToken(): Boolean = !latestPoToken.isNullOrBlank()
+
+    fun getPoTokenResult(videoId: String?): org.schabi.newpipe.extractor.services.youtube.YoutubePoTokenResult? {
+        val pot = (videoId?.let { poTokensByVideo[it] }) ?: latestPoToken ?: return null
+        val vd = visitorData.orEmpty()
+        val cv = clientVersion ?: "2.20241126.01.00"
+        return org.schabi.newpipe.extractor.services.youtube.YoutubePoTokenResult(vd, cv, pot)
     }
 
     fun putBrowserPlayerResponse(videoId: String?, responseBody: String?) {
@@ -63,6 +86,23 @@ internal object AuthContextStore {
             val targetId = VideoId.parse(extractedId) ?: VideoId.parse(videoId) ?: return
             if (parsed.getAsJsonObject("playabilityStatus")?.get("status")?.asString != "OK") return
             val streamingData = parsed.getAsJsonObject("streamingData") ?: return
+            runCatching {
+                val formats = buildList {
+                    streamingData.getAsJsonArray("formats")?.forEach { if (it.isJsonObject) add(it.asJsonObject) }
+                    streamingData.getAsJsonArray("adaptiveFormats")?.forEach { if (it.isJsonObject) add(it.asJsonObject) }
+                }
+                for (f in formats) {
+                    val u = f.get("url")?.takeIf { !it.isJsonNull }?.asString
+                    if (!u.isNullOrBlank() && u.contains("pot=")) {
+                        val pot = Uri.parse(u).getQueryParameter("pot")
+                        if (!pot.isNullOrBlank()) {
+                            latestPoToken = pot
+                            poTokensByVideo[targetId] = pot
+                            break
+                        }
+                    }
+                }
+            }
             if (streamingData.has("serverAbrStreamingUrl")) {
                 streamingData.remove("serverAbrStreamingUrl")
             }
@@ -104,6 +144,7 @@ internal object AuthContextStore {
         runCatching {
             val uri = Uri.parse(url)
             val pot = uri.getQueryParameter("pot") ?: return
+            latestPoToken = pot
             val sb = StringBuilder("&potc=1&pot=").append(Uri.encode(pot))
             uri.getQueryParameter("c")?.let { sb.append("&c=").append(Uri.encode(it)) } ?: sb.append("&c=MWEB")
             uri.getQueryParameter("cver")?.let { sb.append("&cver=").append(Uri.encode(it)) } ?: sb.append("&cver=2.20261029.11.00")
@@ -117,6 +158,7 @@ internal object AuthContextStore {
             val videoId = uri.getQueryParameter("v")
             if (videoId != null) {
                 timedtextParamsByVideo[videoId] = params
+                poTokensByVideo[videoId] = pot
             }
             android.util.Log.i("LiTube_AUTH", "Saved timedtext params for videoId=$videoId (pot=${pot.take(15)}...)")
         }
@@ -371,18 +413,7 @@ class HttpDownloader(
             return bodyString
         }
         if (videoId.isNullOrBlank()) return bodyString
-        var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
-        if (browserResponse == null) {
-            val start = System.currentTimeMillis()
-            while (browserResponse == null && System.currentTimeMillis() - start < 1500L) {
-                try {
-                    Thread.sleep(50)
-                } catch (e: InterruptedException) {
-                    break
-                }
-                browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
-            }
-        }
+        val browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
         if (browserResponse != null) {
             return browserResponse
         }
@@ -398,18 +429,7 @@ class HttpDownloader(
         val videoId = VIDEO_ID_REGEX.find(payload)?.groupValues?.getOrNull(1)
 
         if (!videoId.isNullOrBlank() && url.contains("/youtubei/v1/player") && !url.contains("\$fields=microformat")) {
-            var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
-            if (browserResponse == null) {
-                val start = System.currentTimeMillis()
-                while (browserResponse == null && System.currentTimeMillis() - start < 2500L) {
-                    try {
-                        Thread.sleep(50)
-                    } catch (e: InterruptedException) {
-                        break
-                    }
-                    browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
-                }
-            }
+            val browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
             if (browserResponse != null) {
                 val bytes = browserResponse.toByteArray(Charsets.UTF_8)
                 return Response(
@@ -452,18 +472,7 @@ class HttpDownloader(
         val cancellableCall = CancellableCall(call)
 
         if (!videoId.isNullOrBlank() && url.contains("/youtubei/v1/player") && !url.contains("\$fields=microformat")) {
-            var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
-            if (browserResponse == null) {
-                val start = System.currentTimeMillis()
-                while (browserResponse == null && System.currentTimeMillis() - start < 2500L) {
-                    try {
-                        Thread.sleep(50)
-                    } catch (e: InterruptedException) {
-                        break
-                    }
-                    browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
-                }
-            }
+            val browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
             if (browserResponse != null) {
                 val bytes = browserResponse.toByteArray(Charsets.UTF_8)
                 val result = Response(

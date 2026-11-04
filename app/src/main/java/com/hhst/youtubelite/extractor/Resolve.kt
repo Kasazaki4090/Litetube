@@ -27,8 +27,8 @@ internal class PlayerPage private constructor(
 ) {
     companion object {
         private val CLIENT_LOCK = Any()
-        private val FALLBACK_CLIENTS = listOf("mweb", "tv_simply", "tv_downgraded", "tv_samsung", "visionos")
-        private val AUTH_FALLBACK_CLIENTS = listOf("mweb", "tv_simply", "tv_downgraded", "tv_samsung", "visionos")
+        private val FALLBACK_CLIENTS = listOf("tv_simply", "visionos", "tv_downgraded", "tv_samsung", "mweb")
+        private val AUTH_FALLBACK_CLIENTS = listOf("mweb", "tv_simply", "visionos", "tv_downgraded", "tv_samsung")
 
         private fun setPlayerClient(client: String) {
             runCatching {
@@ -54,9 +54,9 @@ internal class PlayerPage private constructor(
             var bestFallbackPage: PlayerPage? = null
 
             var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
-            if (browserResponse == null) {
+            if (browserResponse == null && (AuthContextStore.hasAuthCookies() || AuthContextStore.hasPoToken())) {
                 val start = System.currentTimeMillis()
-                while (browserResponse == null && System.currentTimeMillis() - start < 2500L) {
+                while (browserResponse == null && System.currentTimeMillis() - start < 400L) {
                     try {
                         Thread.sleep(50)
                     } catch (_: InterruptedException) {
@@ -66,10 +66,14 @@ internal class PlayerPage private constructor(
                 }
             }
 
-            val clients = if (browserResponse != null || AuthContextStore.hasAuthCookies()) {
+            val clients = if (browserResponse != null || AuthContextStore.hasAuthCookies() || AuthContextStore.hasPoToken()) {
                 AUTH_FALLBACK_CLIENTS
             } else {
                 FALLBACK_CLIENTS
+            }
+
+            if ((forbiddenProfilesByVideo[videoId]?.size ?: 0) >= 3) {
+                forbiddenProfilesByVideo[videoId]?.clear()
             }
 
             for (client in clients) {
@@ -326,31 +330,30 @@ internal fun buildRequestPlan(
             url.substring(start, end).ifEmpty { null }
         }
     }
-    val profile = when (clientParam?.uppercase()) {
+    val currentClient = runCatching { NewPipe.getYoutubePlayerClient() }.getOrNull()
+    val resolvedClient = clientParam ?: currentClient
+    val profile = when (resolvedClient?.uppercase()) {
         "VISIONOS" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS
-        "TVHTML5", "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5
+        "TVHTML5", "TV_DOWNGRADED", "TV_SIMPLY", "TV_SAMSUNG", "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5
         "ANDROID" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.ANDROID
         "ANDROID_VR" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.ANDROID_VR
         "IOS" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.IOS
         "WEB_EMBEDDED_PLAYER" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB_EMBEDDED_PLAYER
         "WEB", "MWEB" -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB
-        else -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.VISIONOS
+        else -> org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5
     }
-    val ua = when (clientParam?.uppercase()) {
+    val ua = when (resolvedClient?.uppercase()) {
         "VISIONOS" -> "com.google.visionos.youtube/1.02(RealityDevice14,1; U; CPU visionOS 25_6_0 like Mac OS X; en_US)"
-        "TVHTML5" -> "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"
-        "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER" -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36,gzip(gfe)"
+        "TVHTML5", "TV_DOWNGRADED" -> "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"
+        "TV_SIMPLY", "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "TV_SAMSUNG" -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36,gzip(gfe)"
         "ANDROID" -> "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip"
         "MWEB" -> "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)"
         else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
     }
-    val headers = when (clientParam?.uppercase()) {
-        "TVHTML5", "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "MWEB", "WEB" -> mapOf(
-            "Origin" to "https://www.youtube.com",
-            "Referer" to "https://www.youtube.com/",
-        )
-        else -> emptyMap()
-    }
+    val headers = mapOf(
+        "Origin" to "https://www.youtube.com",
+        "Referer" to "https://www.youtube.com/",
+    )
     val resolvedLen = if (contentLength > 0) contentLength else parseContentLengthFromUrl(url)
     val isTvHtml5 = profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5
     val isAndroid = profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.ANDROID

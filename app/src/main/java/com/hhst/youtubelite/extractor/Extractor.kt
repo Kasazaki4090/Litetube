@@ -30,7 +30,10 @@ class Extractor(
 
     init {
         NewPipe.init(downloader)
-        NewPipe.setYoutubePlayerClient("visionos")
+        NewPipe.setYoutubePlayerClient("tv_simply")
+        NewPipe.setYoutubePoTokenResolver { videoId ->
+            AuthContextStore.getPoTokenResult(videoId)
+        }
     }
 
     @SuppressLint("JavascriptInterface")
@@ -50,11 +53,15 @@ class Extractor(
                                 val dataSyncId = config.get("DATASYNC_ID")?.takeIf { !it.isJsonNull }?.asString
                                 val sessionIndex = config.get("SESSION_INDEX")?.takeIf { !it.isJsonNull }?.asString
                                 val loggedIn = config.get("LOGGED_IN")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                                val clientVersion = config.get("INNERTUBE_CLIENT_VERSION")?.takeIf { !it.isJsonNull }?.asString
+                                val poToken = config.get("_PO_TOKEN")?.takeIf { !it.isJsonNull }?.asString
                                 AuthContextStore.updateFromBrowser(
                                     visitorData = visitorData,
                                     dataSyncId = dataSyncId,
                                     sessionIndex = sessionIndex,
                                     loggedIn = loggedIn,
+                                    clientVersion = clientVersion,
+                                    poToken = poToken,
                                 )
                             }
                             val responseBody = root.get("response")?.takeIf { !it.isJsonNull }?.asString
@@ -110,7 +117,11 @@ class Extractor(
         }
         if (profile != null) {
             if (profile != ClientProfile.WEB || AuthContextStore.getBrowserPlayerResponse(videoId) == null) {
-                forbiddenProfilesByVideo.computeIfAbsent(videoId) { ConcurrentHashMap.newKeySet() }.add(profile)
+                val set = forbiddenProfilesByVideo.computeIfAbsent(videoId) { ConcurrentHashMap.newKeySet() }
+                set.add(profile)
+                if (set.size >= 3) {
+                    set.clear()
+                }
             }
             AppLog.event(
                 AppLog.Category.EXTRACTOR,
@@ -120,6 +131,9 @@ class Extractor(
             )
         }
         return profile
+    }
+    fun clearForbiddenProfiles(videoId: String) {
+        forbiddenProfilesByVideo[videoId]?.clear()
     }
     fun extractionDiagnostics(): String =
         "PipePipeExtractor Engine (client=${NewPipe.getYoutubePlayerClient()}, auth=${AuthContextStore.hasAuthCookies()})"
