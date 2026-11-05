@@ -293,7 +293,12 @@ class HttpDownloader(
             ?.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }
             ?.value?.firstOrNull()
         if (existingUa.isNullOrBlank() || (isYoutubeWebHost && existingUa.contains("Chrome/91."))) {
-            builder.header("User-Agent", DESKTOP_WEB_USER_AGENT.takeIf { isYoutubeWebHost } ?: Constants.userAgent())
+            val defaultUa = if (isYoutubeWebHost) {
+                if (NewPipe.getYoutubePlayerClient() == "mweb") IPAD_USER_AGENT else DESKTOP_WEB_USER_AGENT
+            } else {
+                Constants.userAgent()
+            }
+            builder.header("User-Agent", defaultUa)
         }
 
         if (isYoutubeWebHost) {

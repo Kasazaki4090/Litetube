@@ -18,6 +18,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 internal val forbiddenProfilesByVideo = java.util.concurrent.ConcurrentHashMap<String, MutableSet<org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile>>()
 
+internal const val IPAD_USER_AGENT =
+    "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+
 /**
  * Shared stream and metadata extractor instance powered by PipePipeExtractor.
  */
@@ -56,7 +59,7 @@ internal class PlayerPage private constructor(
             var browserResponse = AuthContextStore.getBrowserPlayerResponse(videoId)
             if (browserResponse == null && (AuthContextStore.hasAuthCookies() || AuthContextStore.hasPoToken())) {
                 val start = System.currentTimeMillis()
-                while (browserResponse == null && System.currentTimeMillis() - start < 400L) {
+                while (browserResponse == null && System.currentTimeMillis() - start < 1500L) {
                     try {
                         Thread.sleep(50)
                     } catch (_: InterruptedException) {
@@ -84,7 +87,7 @@ internal class PlayerPage private constructor(
                     else -> null
                 }
                 if (profile != null && forbiddenProfilesByVideo[videoId]?.contains(profile) == true) {
-                    if (client == "mweb" && AuthContextStore.getBrowserPlayerResponse(videoId) != null) {
+                    if (client == "mweb" && (AuthContextStore.hasAuthCookies() || AuthContextStore.getBrowserPlayerResponse(videoId) != null)) {
                         forbiddenProfilesByVideo[videoId]?.remove(profile)
                     } else {
                         continue
@@ -211,7 +214,9 @@ private fun Metadata.fillFrom(page: PlayerPage) {
         ?: VideoId.thumbnailUrl(id)
     isLive = runCatching {
         info.streamType == StreamType.LIVE_STREAM ||
-            info.streamType == StreamType.AUDIO_LIVE_STREAM
+            info.streamType == StreamType.AUDIO_LIVE_STREAM ||
+            info.streamType == StreamType.POST_LIVE_STREAM ||
+            info.streamType == StreamType.POST_LIVE_AUDIO_STREAM
     }.getOrDefault(false)
 }
 
@@ -347,21 +352,29 @@ internal fun buildRequestPlan(
         "TVHTML5", "TV_DOWNGRADED" -> "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"
         "TV_SIMPLY", "TVHTML5_SIMPLY", "TVHTML5_SIMPLY_EMBEDDED_PLAYER", "TV_SAMSUNG" -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36,gzip(gfe)"
         "ANDROID" -> "com.google.android.youtube/21.03.36 (Linux; U; Android 15; US) gzip"
-        "MWEB" -> "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)"
+        "MWEB" -> IPAD_USER_AGENT
         else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
     }
-    val headers = mapOf(
-        "Origin" to "https://www.youtube.com",
-        "Referer" to "https://www.youtube.com/",
-    )
-    val resolvedLen = if (contentLength > 0) contentLength else parseContentLengthFromUrl(url)
     val isTvHtml5 = profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5
     val isAndroid = profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.ANDROID
     val isWeb = profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB ||
         profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.WEB_EMBEDDED_PLAYER
     val isLive = url.contains("source/yt_live_broadcast") ||
         url.contains("playlist_type/LIVE") ||
-        url.contains("live=1")
+        url.contains("live=1") ||
+        url.contains("manifest/hls") ||
+        url.contains("/hls_") ||
+        url.contains(".m3u8") ||
+        url.contains("manifest/dash") ||
+        url.contains(".mpd") ||
+        url.contains("&sq=") ||
+        url.contains("?sq=")
+    val origin = if (isWeb && resolvedClient?.equals("MWEB", ignoreCase = true) == true) "https://m.youtube.com" else "https://www.youtube.com"
+    val headers = mapOf(
+        "Origin" to origin,
+        "Referer" to "$origin/",
+    )
+    val resolvedLen = if (contentLength > 0) contentLength else parseContentLengthFromUrl(url)
     val range = if (isLive) {
         org.schabi.newpipe.extractor.services.youtube.streams.RequestPlan.Range.NONE
     } else if (isAndroid) {

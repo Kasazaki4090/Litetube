@@ -44,6 +44,7 @@ class PlayerDataSource private constructor(
     private val manifestFactory: ((RequestPlan) -> DataSource.Factory)? = null,
     private val formatFactory: ((List<Format>, Boolean, Boolean) -> DataSource.Factory)? = null,
     private val hlsFactory: ((RequestPlan) -> HlsDataSourceFactory)? = null,
+    private val liveHlsFactory: ((RequestPlan) -> HlsDataSourceFactory)? = null,
 ) {
     fun withDiagnostics(context: DiagnosticContext): PlayerDataSource {
         fun scoped(factory: DataSource.Factory) = DataSource.Factory { DiagnosticDataSource(factory.createDataSource(), context) }
@@ -51,6 +52,9 @@ class PlayerDataSource private constructor(
             manifestFactory = { scoped(manifest(it)) },
             formatFactory = { formats, dash, cached -> scoped(this.formats(formats, dash, cached)) },
             hlsFactory = { plan -> val original = vodHls(plan); HlsDataSourceFactory { type ->
+                DiagnosticDataSource(original.createDataSource(type), context, type)
+            } },
+            liveHlsFactory = { plan -> val original = liveHls(plan); HlsDataSourceFactory { type ->
                 DiagnosticDataSource(original.createDataSource(type), context, type)
             } })
     }
@@ -60,6 +64,9 @@ class PlayerDataSource private constructor(
         formatFactory?.invoke(formats, dash, cached) ?: if (dash) ytDash else if (cached) ytProgressive else ytLiveProgressive
     fun vodHls(plan: RequestPlan?): HlsDataSourceFactory =
         if (plan != null) hlsFactory?.invoke(plan) ?: DefaultHlsDataSourceFactory(live)
+        else DefaultHlsDataSourceFactory(live)
+    fun liveHls(plan: RequestPlan?): HlsDataSourceFactory =
+        if (plan != null) liveHlsFactory?.invoke(plan) ?: DefaultHlsDataSourceFactory(live)
         else DefaultHlsDataSourceFactory(live)
     companion object {
         private const val CACHE_DIR = "player"
@@ -144,6 +151,12 @@ class PlayerDataSource private constructor(
                             SessionCheckedDataSource(media.createDataSource(), plan, current) { plans?.invalidationReason(plan) ?: "unknown" }
                         } else upstream.createDataSource()
                     }
+                },
+                liveHlsFactory = { plan ->
+                    val upstream = youtubeFactory(http, range = false, rn = false).setMediaRequests(plans, plan)
+                        .setConnectTimeoutMs(30_000)
+                        .setReadTimeoutMs(45_000)
+                    DefaultHlsDataSourceFactory(upstream)
                 },
             )
         }

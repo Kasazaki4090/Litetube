@@ -329,14 +329,30 @@ class YoutubeHttpDataSource private constructor(
                 resolvedUrl += "&fmt=vtt"
             }
         }
+        if (resolvedUrl.contains("/videoplayback") && !resolvedUrl.contains("&pot=") && !resolvedUrl.contains("?pot=")) {
+            val pot = com.hhst.youtubelite.extractor.AuthContextStore.latestPoToken
+            if (!pot.isNullOrBlank()) {
+                resolvedUrl += "&pot=" + android.net.Uri.encode(pot)
+            }
+        }
         if (mediaRequests != null) {
             val plan = planResolver?.invoke(resolvedUrl) ?: inheritedPlan ?: mediaRequests.plan(resolvedUrl)
                 ?: if (resolvedUrl.contains("/videoplayback")) com.hhst.youtubelite.extractor.buildRequestPlan(resolvedUrl) else null
             if (plan != null) {
                 activePlan = plan
+                val isSegmentOrManifest = resolvedUrl.contains("manifest/hls") ||
+                    resolvedUrl.contains("/hls_") ||
+                    resolvedUrl.contains(".m3u8") ||
+                    resolvedUrl.contains("manifest/dash") ||
+                    resolvedUrl.contains(".mpd") ||
+                    resolvedUrl.contains("live=1") ||
+                    resolvedUrl.contains("source/yt_live_broadcast") ||
+                    resolvedUrl.contains("playlist_type/LIVE") ||
+                    resolvedUrl.contains("&sq=") ||
+                    resolvedUrl.contains("?sq=")
                 val range = when {
+                    isSegmentOrManifest || plan.range == RequestPlan.Range.NONE -> RequestPlan.Range.NONE
                     plan.profile == org.schabi.newpipe.extractor.services.youtube.streams.ClientProfile.TVHTML5 -> RequestPlan.Range.HEADER
-                    plan.range != RequestPlan.Range.NONE -> plan.range
                     rangeParameterEnabled && resolvedUrl.toHttpUrlOrNull()?.encodedPath?.startsWith("/videoplayback") == true -> RequestPlan.Range.QUERY
                     position > 0 || length >= 0 -> RequestPlan.Range.HEADER
                     else -> plan.range

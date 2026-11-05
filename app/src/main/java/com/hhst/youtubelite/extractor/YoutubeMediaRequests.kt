@@ -160,15 +160,26 @@ class YoutubeMediaRequests(
 
     /** Shared range interpretation for player, download and proxy, including query-cropped views. */
     fun window(response: Response, plan: RequestPlan): Window {
-        val isLive = response.request.url.encodedPath.contains("yt_live_broadcast") ||
-            response.request.url.toString().contains("playlist_type/LIVE") ||
-            response.request.url.queryParameter("live") == "1"
+        val url = response.request.url
+        val urlStr = url.toString()
+        val isLive = url.encodedPath.contains("yt_live_broadcast") ||
+            urlStr.contains("playlist_type/LIVE") ||
+            url.queryParameter("live") == "1" ||
+            url.queryParameter("sq") != null ||
+            url.encodedPath.contains("/hls_") ||
+            url.encodedPath.contains("/api/manifest/hls_") ||
+            url.encodedPath.contains("/api/manifest/dash/") ||
+            urlStr.contains(".m3u8") ||
+            urlStr.contains(".mpd") ||
+            response.header("X-Head-Time") != null ||
+            response.header("X-Walltime-Ms") != null ||
+            plan.range == RequestPlan.Range.NONE
         if (isLive && response.code in 200..299 && response.header("Content-Range") == null) {
             return Window(response.body?.contentLength() ?: -1L, null)
         }
         val query = response.request.url.queryParameter("range")
         val raw = query ?: response.request.header("Range")?.removePrefix("bytes=")
-            ?: if (plan.range == RequestPlan.Range.NONE) return Window(response.body?.contentLength() ?: -1, null)
+            ?: if (plan.range == RequestPlan.Range.NONE || isLive) return Window(response.body?.contentLength() ?: -1, null)
             else throw IOException("MEDIA_RANGE_MISSING")
         val bounds = raw.split('-')
         val start = bounds.getOrNull(0)?.toLongOrNull() ?: throw IOException("MEDIA_RANGE_INVALID")
@@ -181,10 +192,10 @@ class YoutubeMediaRequests(
         if (response.code == 206 && cr == null) throw IOException("MEDIA_RANGE_MISSING")
         if (cr != null && !cropped && (cr.start != start || cr.end < cr.start || cr.end > end)) throw IOException("MEDIA_RANGE_MISMATCH")
         val count = cr?.let { it.end - it.start + 1 } ?: length
-        val wholeObject = response.code == 200 && query == null && cr == null && plan.range == RequestPlan.Range.NONE
+        val wholeObject = response.code == 200 && query == null && cr == null && (plan.range == RequestPlan.Range.NONE || isLive || start == 0L)
         if (count == 0L || (!wholeObject && (count > wanted || length > wanted))) throw IOException("MEDIA_RANGE_IGNORED")
         if (response.code == 200 && query == null && cr == null && plan.resourceLength > 0 && length != plan.resourceLength) throw IOException("MEDIA_OBJECT_CHANGED")
-        if (!wholeObject && response.code == 200 && query == null && cr == null && (start != 0L || length < 0 || length > wanted)) throw IOException("MEDIA_RANGE_IGNORED")
+        if (!wholeObject && response.code == 200 && query == null && cr == null) throw IOException("MEDIA_RANGE_IGNORED")
         if (cr != null && length >= 0 && length != count) throw IOException("MEDIA_LENGTH_MISMATCH")
         val total = if (cropped) null else cr?.total
         if (plan.resourceLength > 0 && total != null && total != plan.resourceLength) throw IOException("MEDIA_OBJECT_CHANGED")

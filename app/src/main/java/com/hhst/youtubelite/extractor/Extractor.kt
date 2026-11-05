@@ -116,7 +116,7 @@ class Extractor(
             else -> null
         }
         if (profile != null) {
-            if (profile != ClientProfile.WEB || AuthContextStore.getBrowserPlayerResponse(videoId) == null) {
+            if (profile != ClientProfile.WEB || (!AuthContextStore.hasAuthCookies() && AuthContextStore.getBrowserPlayerResponse(videoId) == null)) {
                 val set = forbiddenProfilesByVideo.computeIfAbsent(videoId) { ConcurrentHashMap.newKeySet() }
                 set.add(profile)
                 if (set.size >= 3) {

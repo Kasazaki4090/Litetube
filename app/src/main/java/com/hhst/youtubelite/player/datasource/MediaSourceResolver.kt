@@ -275,7 +275,7 @@ class MediaSourceResolver(
         }
         val subtitles = SubtitleSelection.select(stream.subtitles, subtitleKey)
         stream.hlsUrl?.takeIf { it.isNotBlank() }?.let { url ->
-            val factory = HlsMediaSource.Factory(dataSources.live)
+            val factory = HlsMediaSource.Factory(dataSources.liveHls(stream.hlsRequestPlan))
                 .setLoadErrorHandlingPolicy(PlaybackLoadErrorPolicy())
                 .setAllowChunklessPreparation(true)
             return Resolved(
